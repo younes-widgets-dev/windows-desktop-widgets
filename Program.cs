@@ -80,6 +80,7 @@ namespace DesktopWidgets
         }
         [DllImport("kernel32.dll")] public static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
         public const int WS_EX_TOOLWINDOW = 0x80;
+        [DllImport("kernel32.dll")] public static extern ulong GetTickCount64();
 
         [StructLayout(LayoutKind.Sequential)]
         struct AccentPolicy { public int AccentState; public int AccentFlags; public int GradientColor; public int AnimationId; }
@@ -115,9 +116,11 @@ namespace DesktopWidgets
         public Color Bg = Color.FromArgb(24, 26, 32), Fg = Color.FromArgb(240, 240, 245), Dim = Color.FromArgb(150, 155, 170), Accent = Color.FromArgb(80, 160, 255), Border = Color.FromArgb(90, 255, 255, 255);
         public string Font = "Segoe UI";
         public double Opacity = 0.95;
-        public bool Top, Lock, Bar = true;
+        public bool Top, Lock, Bar = true, ShowTitle = true, Bold = false;
+        public int BarPos = 0, BarW = 3, Grad = 0;
+        public Color Bg2 = Color.FromArgb(48, 52, 66);
 
-        public static readonly string[] ShapeNames = { "Rounded", "Rectangle", "Pill", "Ellipse / Circle", "Hexagon", "Octagon", "Diamond", "Cut corners", "Leaf", "Tab", "Squircle", "Parallelogram" };
+        public static readonly string[] ShapeNames = { "Rounded", "Rectangle", "Pill", "Ellipse / Circle", "Hexagon", "Octagon", "Diamond", "Cut corners", "Leaf", "Tab (top)", "Squircle", "Parallelogram", "Pentagon", "Trapezoid", "Pill (left)", "Tab (bottom)", "Ticket", "Shield", "Star", "Triangle", "Pill (right)", "Diagonal corners" };
         public static readonly string[] ModeNames = { "Solid", "Transparent tint", "Blur (glass)", "Acrylic (frosted glass)" };
 
         static int C(Color c) { return c.ToArgb(); }
@@ -134,6 +137,8 @@ namespace DesktopWidgets
             Font = Settings.Get(id + ".font", Font);
             Opacity = Settings.GetInt(id + ".opacity100", 95) / 100.0;
             Top = Settings.GetBool(id + ".top", false); Lock = Settings.GetBool(id + ".locked", false); Bar = Settings.GetBool(id + ".bar", Bar);
+            ShowTitle = Settings.GetBool(id + ".title", true); Bold = Settings.GetBool(id + ".bold", false);
+            BarPos = Settings.GetInt(id + ".barpos", 0); BarW = Settings.GetInt(id + ".barw", 3); Grad = Settings.GetInt(id + ".grad", 0); Bg2 = Color.FromArgb(Settings.GetInt(id + ".bg2", C(Bg2)));
         }
         public void Save(string id)
         {
@@ -143,18 +148,19 @@ namespace DesktopWidgets
             Settings.Set(id + ".bg", C(Bg)); Settings.Set(id + ".fg", C(Fg)); Settings.Set(id + ".dim", C(Dim)); Settings.Set(id + ".accent", C(Accent)); Settings.Set(id + ".border", C(Border));
             Settings.Set(id + ".font", Font); Settings.Set(id + ".opacity100", (int)Math.Round(Opacity * 100));
             Settings.Set(id + ".top", Top); Settings.Set(id + ".locked", Lock); Settings.Set(id + ".bar", Bar);
+            Settings.Set(id + ".title", ShowTitle); Settings.Set(id + ".bold", Bold); Settings.Set(id + ".barpos", BarPos); Settings.Set(id + ".barw", BarW); Settings.Set(id + ".grad", Grad); Settings.Set(id + ".bg2", C(Bg2));
             Settings.Save();
         }
         public void CopyLookFrom(Sty o)
         {
             Shape = o.Shape; Radius = o.Radius; Mode = o.Mode; BgAlpha = o.BgAlpha; BorderW = o.BorderW; Pad = o.Pad; FontPct = o.FontPct;
-            Bg = o.Bg; Fg = o.Fg; Dim = o.Dim; Accent = o.Accent; Border = o.Border; Font = o.Font; Opacity = o.Opacity; Bar = o.Bar;
+            Bg = o.Bg; Fg = o.Fg; Dim = o.Dim; Accent = o.Accent; Border = o.Border; Font = o.Font; Opacity = o.Opacity; Bar = o.Bar; ShowTitle = o.ShowTitle; Bold = o.Bold; BarPos = o.BarPos; BarW = o.BarW; Grad = o.Grad; Bg2 = o.Bg2;
         }
 
-        public static readonly string[] ThemeNames = { "Dark", "Light", "Acrylic dark", "Acrylic light", "Blur glass", "Clear (text only)", "Neon", "Terminal", "Sunset", "Pastel", "Midnight", "Paper" };
+        public static readonly string[] ThemeNames = { "Dark", "Light", "Acrylic dark", "Acrylic light", "Blur glass", "Clear (text only)", "Neon", "Terminal", "Sunset", "Pastel", "Midnight", "Paper", "Dracula", "Nord", "Solarized dark", "Solarized light", "Gruvbox", "Monokai", "Cyberpunk", "Ocean gradient", "Forest gradient", "Rose gold", "Matrix", "Mono black", "Mono white", "High contrast", "Aqua glass", "Crimson glass", "Retro amber", "Violet gradient", "Sunrise gradient", "Slate" };
         public void ApplyTheme(string name)
         {
-            Mode = 0; BgAlpha = 160; Shape = 0; Radius = 14; BorderW = 0; Bar = true; Opacity = 0.95; Pad = 0;
+            Mode = 0; BgAlpha = 160; Shape = 0; Radius = 14; BorderW = 0; Bar = true; Opacity = 0.95; Pad = 0; Grad = 0; BarPos = 0; BarW = 3; ShowTitle = true; Bold = false; Bg2 = Color.FromArgb(48, 52, 66);
             Border = Color.FromArgb(90, 255, 255, 255); Font = "Segoe UI";
             switch (name)
             {
@@ -169,6 +175,26 @@ namespace DesktopWidgets
                 case "Pastel": Bg = Color.FromArgb(250, 235, 241); Fg = Color.FromArgb(90, 60, 80); Dim = Color.FromArgb(160, 125, 145); Accent = Color.FromArgb(240, 130, 170); Radius = 26; break;
                 case "Midnight": Bg = Color.FromArgb(10, 14, 30); Fg = Color.FromArgb(220, 230, 255); Dim = Color.FromArgb(120, 135, 175); Accent = Color.FromArgb(100, 140, 255); Radius = 12; break;
                 case "Paper": Bg = Color.FromArgb(250, 246, 235); Fg = Color.FromArgb(60, 50, 40); Dim = Color.FromArgb(140, 125, 105); Accent = Color.FromArgb(190, 90, 50); Radius = 4; BorderW = 1; Border = Color.FromArgb(215, 205, 185); Font = "Georgia"; break;
+                case "Dracula": Bg = Color.FromArgb(40, 42, 54); Fg = Color.FromArgb(248, 248, 242); Dim = Color.FromArgb(139, 148, 190); Accent = Color.FromArgb(189, 147, 249); Radius = 12; break;
+                case "Nord": Bg = Color.FromArgb(46, 52, 64); Fg = Color.FromArgb(236, 239, 244); Dim = Color.FromArgb(129, 161, 193); Accent = Color.FromArgb(136, 192, 208); Radius = 10; break;
+                case "Solarized dark": Bg = Color.FromArgb(0, 43, 54); Fg = Color.FromArgb(238, 232, 213); Dim = Color.FromArgb(131, 148, 150); Accent = Color.FromArgb(181, 137, 0); Radius = 8; break;
+                case "Solarized light": Bg = Color.FromArgb(253, 246, 227); Fg = Color.FromArgb(88, 110, 117); Dim = Color.FromArgb(147, 161, 161); Accent = Color.FromArgb(38, 139, 210); Radius = 8; break;
+                case "Gruvbox": Bg = Color.FromArgb(40, 40, 40); Fg = Color.FromArgb(235, 219, 178); Dim = Color.FromArgb(168, 153, 132); Accent = Color.FromArgb(250, 189, 47); Radius = 6; break;
+                case "Monokai": Bg = Color.FromArgb(39, 40, 34); Fg = Color.FromArgb(248, 248, 242); Dim = Color.FromArgb(166, 172, 140); Accent = Color.FromArgb(166, 226, 46); Radius = 6; break;
+                case "Cyberpunk": Bg = Color.FromArgb(20, 6, 40); Bg2 = Color.FromArgb(60, 10, 70); Grad = 3; Fg = Color.FromArgb(255, 238, 0); Dim = Color.FromArgb(0, 230, 255); Accent = Color.FromArgb(255, 0, 140); Border = Color.FromArgb(0, 230, 255); BorderW = 2; Shape = 7; Radius = 14; Bar = false; break;
+                case "Ocean gradient": Bg = Color.FromArgb(6, 40, 80); Bg2 = Color.FromArgb(0, 130, 160); Grad = 1; Fg = Color.White; Dim = Color.FromArgb(180, 225, 240); Accent = Color.FromArgb(120, 240, 230); Radius = 20; Bar = false; break;
+                case "Forest gradient": Bg = Color.FromArgb(12, 40, 28); Bg2 = Color.FromArgb(40, 100, 60); Grad = 1; Fg = Color.FromArgb(230, 250, 235); Dim = Color.FromArgb(160, 205, 175); Accent = Color.FromArgb(160, 240, 120); Radius = 20; Bar = false; break;
+                case "Rose gold": Bg = Color.FromArgb(60, 38, 42); Bg2 = Color.FromArgb(120, 80, 80); Grad = 3; Fg = Color.FromArgb(255, 235, 225); Dim = Color.FromArgb(225, 185, 175); Accent = Color.FromArgb(255, 190, 170); Radius = 24; Bar = false; break;
+                case "Matrix": Bg = Color.Black; Fg = Color.FromArgb(0, 255, 70); Dim = Color.FromArgb(0, 140, 40); Accent = Color.FromArgb(0, 255, 70); Shape = 1; Radius = 0; Bar = false; Font = "Consolas"; BorderW = 1; Border = Color.FromArgb(0, 140, 40); break;
+                case "Mono black": Bg = Color.Black; Fg = Color.White; Dim = Color.FromArgb(150, 150, 150); Accent = Color.White; Radius = 0; Shape = 1; Bar = false; BorderW = 1; Border = Color.FromArgb(70, 70, 70); break;
+                case "Mono white": Bg = Color.White; Fg = Color.Black; Dim = Color.FromArgb(110, 110, 110); Accent = Color.Black; Radius = 0; Shape = 1; Bar = false; BorderW = 1; Border = Color.FromArgb(200, 200, 200); break;
+                case "High contrast": Bg = Color.Black; Fg = Color.Yellow; Dim = Color.White; Accent = Color.Cyan; BorderW = 3; Border = Color.Yellow; Radius = 4; Bar = false; Bold = true; break;
+                case "Aqua glass": Mode = 3; Bg = Color.FromArgb(0, 80, 110); BgAlpha = 120; Fg = Color.White; Dim = Color.FromArgb(200, 240, 250); Accent = Color.FromArgb(120, 255, 240); Bar = false; BorderW = 1; Border = Color.FromArgb(150, 160, 255, 250); Radius = 24; break;
+                case "Crimson glass": Mode = 3; Bg = Color.FromArgb(90, 0, 20); BgAlpha = 130; Fg = Color.White; Dim = Color.FromArgb(255, 200, 205); Accent = Color.FromArgb(255, 110, 120); Bar = false; BorderW = 1; Border = Color.FromArgb(150, 255, 140, 150); Radius = 24; break;
+                case "Retro amber": Bg = Color.FromArgb(20, 10, 0); Fg = Color.FromArgb(255, 176, 0); Dim = Color.FromArgb(160, 100, 0); Accent = Color.FromArgb(255, 176, 0); Shape = 1; Radius = 0; Bar = false; Font = "Consolas"; BorderW = 2; Border = Color.FromArgb(160, 100, 0); break;
+                case "Violet gradient": Bg = Color.FromArgb(40, 16, 90); Bg2 = Color.FromArgb(150, 60, 180); Grad = 3; Fg = Color.White; Dim = Color.FromArgb(220, 190, 240); Accent = Color.FromArgb(255, 170, 240); Radius = 22; Bar = false; break;
+                case "Sunrise gradient": Bg = Color.FromArgb(200, 70, 60); Bg2 = Color.FromArgb(255, 190, 90); Grad = 3; Fg = Color.White; Dim = Color.FromArgb(255, 235, 215); Accent = Color.FromArgb(80, 20, 40); Radius = 22; Bar = false; break;
+                case "Slate": Bg = Color.FromArgb(55, 63, 78); Fg = Color.FromArgb(235, 240, 248); Dim = Color.FromArgb(150, 162, 182); Accent = Color.FromArgb(110, 200, 170); Radius = 16; break;
                 default: Bg = Color.FromArgb(24, 26, 32); Fg = Color.FromArgb(240, 240, 245); Dim = Color.FromArgb(150, 155, 170); Accent = Color.FromArgb(80, 160, 255); break;
             }
         }
@@ -221,6 +247,27 @@ namespace DesktopWidgets
                     { float o = Math.Min(r.Width * 0.3f, r.Height * 0.3f); p = new GraphicsPath();
                       p.AddPolygon(new PointF[] { new PointF(r.X + o, r.Y), new PointF(r.Right, r.Y), new PointF(r.Right - o, r.Bottom), new PointF(r.X, r.Bottom) });
                       return p; }
+                case 12: p = new GraphicsPath(); p.AddPolygon(new PointF[] { new PointF(r.X + r.Width / 2, r.Y), new PointF(r.Right, r.Y + r.Height * 0.38f), new PointF(r.X + r.Width * 0.82f, r.Bottom), new PointF(r.X + r.Width * 0.18f, r.Bottom), new PointF(r.X, r.Y + r.Height * 0.38f) }); return p;
+                case 13: p = new GraphicsPath(); p.AddPolygon(new PointF[] { new PointF(r.X + r.Width * 0.15f, r.Y), new PointF(r.Right - r.Width * 0.15f, r.Y), new PointF(r.Right, r.Bottom), new PointF(r.X, r.Bottom) }); return p;
+                case 14: return RR(r, m / 2f, 0, 0, m / 2f);
+                case 15: return RR(r, 0, 0, rad, rad);
+                case 16:
+                    { float n = Math.Min(r.Width, r.Height) * 0.12f; float my = r.Y + r.Height / 2; p = new GraphicsPath();
+                      p.AddPolygon(new PointF[] { new PointF(r.X, r.Y), new PointF(r.Right, r.Y), new PointF(r.Right, my - n), new PointF(r.Right - n, my), new PointF(r.Right, my + n), new PointF(r.Right, r.Bottom), new PointF(r.X, r.Bottom), new PointF(r.X, my + n), new PointF(r.X + n, my), new PointF(r.X, my - n) });
+                      return p; }
+                case 17:
+                    p = new GraphicsPath(); p.StartFigure();
+                    p.AddLine(r.X, r.Y, r.Right, r.Y); p.AddLine(r.Right, r.Y, r.Right, r.Y + r.Height * 0.55f);
+                    p.AddBezier(r.Right, r.Y + r.Height * 0.55f, r.Right, r.Y + r.Height * 0.85f, r.X + r.Width * 0.7f, r.Y + r.Height * 0.95f, r.X + r.Width / 2, r.Bottom);
+                    p.AddBezier(r.X + r.Width / 2, r.Bottom, r.X + r.Width * 0.3f, r.Y + r.Height * 0.95f, r.X, r.Y + r.Height * 0.85f, r.X, r.Y + r.Height * 0.55f);
+                    p.CloseFigure(); return p;
+                case 18:
+                    { PointF[] pts = new PointF[10]; float cx = r.X + r.Width / 2, cy = r.Y + r.Height * 0.53f;
+                      for (int i = 0; i < 10; i++) { double a = -Math.PI / 2 + i * Math.PI / 5; float k = i % 2 == 0 ? 1f : 0.42f; pts[i] = new PointF(cx + (float)Math.Cos(a) * r.Width / 2 * k, cy + (float)Math.Sin(a) * r.Height / 2 * 1.04f * k); }
+                      p = new GraphicsPath(); p.AddPolygon(pts); return p; }
+                case 19: p = new GraphicsPath(); p.AddPolygon(new PointF[] { new PointF(r.X + r.Width / 2, r.Y), new PointF(r.Right, r.Bottom), new PointF(r.X, r.Bottom) }); return p;
+                case 20: return RR(r, 0, m / 2f, m / 2f, 0);
+                case 21: { float big = Math.Max(rad, 6); return RR(r, big, 0, big, 0); }
                 default: return RR(r, rad, rad, rad, rad);
             }
         }
@@ -305,7 +352,7 @@ namespace DesktopWidgets
             Font f;
             if (!fonts.TryGetValue(key, out f))
             {
-                try { f = new Font(St.Font, size, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel); }
+                try { f = new Font(St.Font, size, (bold || St.Bold) ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel); }
                 catch { f = new Font("Segoe UI", size, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel); }
                 fonts[key] = f;
             }
@@ -323,6 +370,16 @@ namespace DesktopWidgets
                 sz -= 2;
             }
             g.DrawString(s, F(sz, bold), b, r, centerFmt);
+        }
+        protected void Ttl(Graphics g, string s, float x, float y) { if (St.ShowTitle) g.DrawString(s, F(13, true), DimB, x, y); }
+        protected static string Gb(double bytes) { return (bytes / 1073741824.0).ToString("0.0", CultureInfo.InvariantCulture); }
+        protected void Spark(Graphics g, double[] h, float x, float y, float w, float ht, double min, double maxFloor, Color c)
+        {
+            double max = maxFloor; foreach (double v in h) if (v > max) max = v;
+            if (max <= min || w < 4 || ht < 4) return;
+            PointF[] pts = new PointF[h.Length];
+            for (int i = 0; i < h.Length; i++) pts[i] = new PointF(x + i * (w / (h.Length - 1)), (float)(y + ht - ((h[i] - min) / (max - min)) * ht));
+            using (Pen p = new Pen(c, 1.5f)) g.DrawLines(p, pts);
         }
         protected void Bar(Graphics g, float x, float y, float w, float h, double frac)
         {
@@ -343,13 +400,25 @@ namespace DesktopWidgets
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.Clear(St.Mode > 0 ? Color.Black : St.Bg);
+            if (St.Mode == 0 && St.Grad > 0)
+            {
+                float ang = St.Grad == 1 ? 90f : (St.Grad == 2 ? 0f : 45f);
+                using (LinearGradientBrush gb = new LinearGradientBrush(new Rectangle(0, 0, Width + 1, Height + 1), St.Bg, St.Bg2, ang)) g.FillRectangle(gb, 0, 0, Width + 1, Height + 1);
+            }
             using (GraphicsPath path = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height)))
             {
                 if (St.Bar)
                 {
                     GraphicsState s = g.Save();
                     g.SetClip(path, CombineMode.Intersect);
-                    using (SolidBrush b = new SolidBrush(St.Accent)) g.FillRectangle(b, 0, 0, Width, Math.Max(2, (int)(3 * Fs)));
+                    int bw = Math.Max(1, (int)(St.BarW * Fs));
+                    using (SolidBrush b = new SolidBrush(St.Accent))
+                    {
+                        if (St.BarPos == 0) g.FillRectangle(b, 0, 0, Width, bw);
+                        else if (St.BarPos == 1) g.FillRectangle(b, 0, Height - bw, Width, bw);
+                        else if (St.BarPos == 2) g.FillRectangle(b, 0, 0, bw, Height);
+                        else g.FillRectangle(b, Width - bw, 0, bw, Height);
+                    }
                     g.Restore(s);
                 }
                 if (St.BorderW > 0)
@@ -364,26 +433,70 @@ namespace DesktopWidgets
             Draw(g);
         }
 
+        int edge; // 1 L, 2 R, 4 T, 8 B
+        Size resStart; Point resLoc;
+        int HitEdge(Point p)
+        {
+            if (St.Lock) return 0;
+            int m = 8, e = 0;
+            if (p.X < m) e |= 1; if (p.X >= Width - m) e |= 2; if (p.Y < m) e |= 4; if (p.Y >= Height - m) e |= 8;
+            return e;
+        }
+        static Cursor CursorFor(int e)
+        {
+            if (e == 1 || e == 2) return Cursors.SizeWE;
+            if (e == 4 || e == 8) return Cursors.SizeNS;
+            if (e == 5 || e == 10) return Cursors.SizeNWSE;
+            if (e == 6 || e == 9) return Cursors.SizeNESW;
+            return Cursors.Default;
+        }
+        public void ResizeTo(int w, int h)
+        {
+            St.W = Math.Max(60, w); St.H = Math.Max(40, h);
+            ClientSize = new Size(St.W, St.H);
+            using (GraphicsPath p = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height))) Region = new Region(p);
+            LW = (float)((Width - 2 * St.Pad) / Fs); LH = (float)((Height - 2 * St.Pad) / Fs);
+            Invalidate();
+        }
         protected override void OnMouseDown(MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left) { dragStart = Cursor.Position; formStart = Location; moved = false; dragging = !St.Lock; }
+            if (e.Button == MouseButtons.Left)
+            {
+                dragStart = Cursor.Position; formStart = Location; moved = false;
+                edge = HitEdge(e.Location);
+                resStart = Size; resLoc = Location;
+                dragging = !St.Lock && edge == 0;
+            }
             base.OnMouseDown(e);
         }
         protected override void OnMouseMove(MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
             {
-                Point c = Cursor.Position;
-                if (Math.Abs(c.X - dragStart.X) + Math.Abs(c.Y - dragStart.Y) > 4) moved = true;
-                if (dragging && moved) Location = new Point(formStart.X + c.X - dragStart.X, formStart.Y + c.Y - dragStart.Y);
+                Point c = Cursor.Position; int dx = c.X - dragStart.X, dy = c.Y - dragStart.Y;
+                if (Math.Abs(dx) + Math.Abs(dy) > 4) moved = true;
+                if (edge != 0 && moved)
+                {
+                    int nw = resStart.Width, nh = resStart.Height, nx = resLoc.X, ny = resLoc.Y;
+                    if ((edge & 2) != 0) nw += dx;
+                    if ((edge & 1) != 0) { nw -= dx; nx += dx; }
+                    if ((edge & 8) != 0) nh += dy;
+                    if ((edge & 4) != 0) { nh -= dy; ny += dy; }
+                    if (nw < 60) { if ((edge & 1) != 0) nx -= 60 - nw; nw = 60; }
+                    if (nh < 40) { if ((edge & 4) != 0) ny -= 40 - nh; nh = 40; }
+                    Location = new Point(nx, ny); ResizeTo(nw, nh);
+                }
+                else if (dragging && moved) Location = new Point(formStart.X + dx, formStart.Y + dy);
             }
+            else Cursor = CursorFor(HitEdge(e.Location));
             base.OnMouseMove(e);
         }
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            if (dragging && moved) SavePos();
+            if (edge != 0 && moved) { St.Save(Id); SavePos(); }
+            else if (dragging && moved) SavePos();
             if (e.Button == MouseButtons.Left && !moved) OnWidgetClick(new PointF((float)((e.X - St.Pad) / Fs), (float)((e.Y - St.Pad) / Fs)));
-            dragging = false;
+            dragging = false; edge = 0;
             base.OnMouseUp(e);
         }
         protected override void OnShown(EventArgs e) { base.OnShown(e); SendBack(); }
@@ -406,6 +519,32 @@ namespace DesktopWidgets
             ToolStripMenuItem th = new ToolStripMenuItem("Quick theme");
             foreach (string t in Sty.ThemeNames) { string tt = t; th.DropDownItems.Add(tt, null, delegate { St.ApplyTheme(tt); Restyle(); }); }
             m.Items.Add(th);
+            ToolStripMenuItem op = new ToolStripMenuItem("Opacity");
+            foreach (int pct in new int[] { 20, 30, 40, 50, 60, 70, 80, 90, 100 })
+            {
+                int pp = pct;
+                op.DropDownItems.Add(pp + "%", null, delegate { if (St.Mode == 0) St.Opacity = pp / 100.0; else St.BgAlpha = pp * 255 / 100; Restyle(); });
+            }
+            m.Items.Add(op);
+            ToolStripMenuItem sz = new ToolStripMenuItem("Size (whole widget)");
+            foreach (int pct in new int[] { 50, 60, 70, 85, 100, 115, 125, 150, 175, 200, 250, 300 })
+            {
+                int pp = pct;
+                sz.DropDownItems.Add(pp + "%", null, delegate { St.W = DefW * pp / 100; St.H = DefH * pp / 100; St.FontPct = pp; Restyle(); });
+            }
+            m.Items.Add(sz);
+            ToolStripMenuItem col = new ToolStripMenuItem("Accent color");
+            string[] cn = { "Blue", "Green", "Orange", "Pink", "Purple", "White", "Red", "Cyan", "Yellow", "Lime", "Teal", "Gold" };
+            Color[] cc = { Color.FromArgb(80, 160, 255), Color.FromArgb(70, 210, 140), Color.FromArgb(255, 170, 60), Color.FromArgb(255, 100, 150), Color.FromArgb(170, 120, 255), Color.FromArgb(235, 235, 235), Color.FromArgb(255, 80, 80), Color.FromArgb(0, 230, 255), Color.FromArgb(255, 235, 60), Color.FromArgb(160, 240, 70), Color.FromArgb(0, 170, 160), Color.FromArgb(255, 200, 40) };
+            for (int i = 0; i < cn.Length; i++) { Color c1 = cc[i]; col.DropDownItems.Add(cn[i], null, delegate { St.Accent = c1; Restyle(); }); }
+            m.Items.Add(col);
+            ToolStripMenuItem rf = new ToolStripMenuItem("Refresh rate");
+            foreach (int ms in new int[] { 100, 250, 500, 1000, 2000, 5000, 10000, 60000 })
+            {
+                int mm = ms;
+                rf.DropDownItems.Add((mm / 1000.0).ToString("0.##", CultureInfo.InvariantCulture) + " s", null, delegate { St.Interval = mm; Restyle(); });
+            }
+            m.Items.Add(rf);
             ToolStripMenuItem lk = new ToolStripMenuItem("Lock position"); lk.CheckOnClick = true;
             lk.Click += delegate { St.Lock = lk.Checked; Restyle(); };
             ToolStripMenuItem top = new ToolStripMenuItem("Always on top"); top.CheckOnClick = true;
@@ -714,7 +853,7 @@ namespace DesktopWidgets
         }
         protected override void Draw(Graphics g)
         {
-            Txt(g, "NETWORK", 13, true, DimB, 2, 2);
+            Ttl(g, "NETWORK", 2, 2);
             Txt(g, "v " + Fmt(down), 20, true, AccB, 2, 18); Txt(g, "^ " + Fmt(up), 13, false, FgB, 2, 44);
             double max = 1024; foreach (double h in hist) if (h > max) max = h;
             float gy = 66, gh = LH - gy - 2; if (gh < 10) return;
@@ -733,7 +872,7 @@ namespace DesktopWidgets
             PowerStatus ps = SystemInformation.PowerStatus;
             double p = ps.BatteryLifePercent; if (p > 1) p = 1;
             bool none = (ps.BatteryChargeStatus & BatteryChargeStatus.NoSystemBattery) != 0;
-            Txt(g, "BATTERY", 13, true, DimB, 2, 2);
+            Ttl(g, "BATTERY", 2, 2);
             Txt(g, none ? "AC power" : (p * 100).ToString("0") + "%", 26, true, FgB, 2, 16);
             if (!none)
             {
@@ -817,7 +956,7 @@ namespace DesktopWidgets
             tb.ForeColor = St.Fg;
             try { tb.Font = new Font(St.Font, 12f * fs, FontStyle.Regular, GraphicsUnit.Pixel); } catch { }
         }
-        protected override void Draw(Graphics g) { Txt(g, "NOTES", 13, true, DimB, 6, 6); }
+        protected override void Draw(Graphics g) { Ttl(g, "NOTES", 6, 6); }
     }
 
     // ================= Stopwatch =================
@@ -830,10 +969,305 @@ namespace DesktopWidgets
         protected override void Draw(Graphics g)
         {
             TimeSpan t = sw.Elapsed;
-            Txt(g, "STOPWATCH", 13, true, DimB, 2, 2);
+            Ttl(g, "STOPWATCH", 2, 2);
             Txt(g, sw.IsRunning ? "click: pause" : "click: start", 12, false, DimB, LW - 90, 4);
             Fit(g, string.Format("{0:00}:{1:00}.{2:0}", (int)t.TotalMinutes, t.Seconds, t.Milliseconds / 100), 80, true, FgB, new RectangleF(0, 20, LW, LH - 36));
             Txt(g, "double-click: reset", 11, false, AccB, 2, LH - 16);
+        }
+    }
+
+    // ================= CPU (detailed) =================
+    class CpuWidget : Widget
+    {
+        long pi, pk, pu; double cpu; double[] hist = new double[60]; double[] cores; PerformanceCounter[] pcs; int procs, threads, n;
+        TimeSpan up; string name = "";
+        bool ShowCores { get { return Settings.GetBool(Id + ".cores", true); } }
+        bool ShowGraph { get { return Settings.GetBool(Id + ".graph", true); } }
+        bool ShowInfo { get { return Settings.GetBool(Id + ".info", true); } }
+        public CpuWidget(string id) : base(id, "cpu", "CPU (detailed)", 240, 190, 1000)
+        {
+            long i, k, u; Native.GetSystemTimes(out i, out k, out u); pi = i; pk = k; pu = u;
+            cores = new double[Environment.ProcessorCount];
+            try { name = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString", ""); name = name == null ? "" : name.Trim(); } catch { }
+        }
+        public override void BuildExtra(Action<string, Control> add)
+        {
+            AddCheck(add, "Show graph", ".graph", true); AddCheck(add, "Show per-core usage", ".cores", true); AddCheck(add, "Show processes / uptime / CPU name", ".info", true);
+        }
+        void AddCheck(Action<string, Control> add, string text, string key, bool def)
+        {
+            CheckBox c = new CheckBox(); c.Text = text; c.Checked = Settings.GetBool(Id + key, def); c.Width = 280;
+            c.CheckedChanged += delegate { Settings.Set(Id + key, c.Checked); Settings.Save(); Invalidate(); };
+            add("", c);
+        }
+        int tickN;
+        protected override void OnTick()
+        {
+            long i, k, u;
+            if (Native.GetSystemTimes(out i, out k, out u))
+            {
+                long idle = i - pi, total = (k - pk) + (u - pu);
+                if (total > 0) cpu = 1.0 - (double)idle / total;
+                pi = i; pk = k; pu = u;
+            }
+            Array.Copy(hist, 1, hist, 0, hist.Length - 1); hist[hist.Length - 1] = cpu * 100;
+            if (ShowCores)
+            {
+                try
+                {
+                    if (pcs == null) { pcs = new PerformanceCounter[cores.Length]; for (int c = 0; c < pcs.Length; c++) pcs[c] = new PerformanceCounter("Processor", "% Processor Time", c.ToString()); }
+                    for (int c = 0; c < pcs.Length; c++) cores[c] = pcs[c].NextValue() / 100.0;
+                }
+                catch { }
+            }
+            if (ShowInfo && tickN++ % 3 == 0)
+            {
+                try
+                {
+                    Process[] ps = Process.GetProcesses(); procs = ps.Length; int t = 0;
+                    foreach (Process p in ps) { try { t += p.Threads.Count; } catch { } p.Dispose(); }
+                    threads = t;
+                }
+                catch { }
+                up = TimeSpan.FromMilliseconds(Native.GetTickCount64());
+            }
+        }
+        protected override void Draw(Graphics g)
+        {
+            float W = LW, H = LH; float y = 0;
+            Ttl(g, "CPU", 2, 0);
+            Txt(g, (cpu * 100).ToString("0") + "%", 30, true, FgB, 2, 14);
+            if (ShowInfo && name != "") g.DrawString(name, F(11, false), DimB, new RectangleF(88, 6, W - 90, 30), new StringFormat { Alignment = StringAlignment.Far, Trimming = StringTrimming.EllipsisCharacter });
+            y = 50;
+            if (ShowGraph) { float gh = Math.Min(48, H * 0.22f); Spark(g, hist, 2, y, W - 4, gh, 0, 100, St.Accent); y += gh + 6; }
+            float footer = ShowInfo ? 18 : 0;
+            if (ShowCores && H - y - footer > 14)
+            {
+                int cn = cores.Length; float gap = 3; float bw = Math.Max(3, (W - 4 - gap * (cn - 1)) / cn); float bh = H - y - footer - 2;
+                for (int c = 0; c < cn; c++)
+                {
+                    float x = 2 + c * (bw + gap);
+                    using (SolidBrush bg = new SolidBrush(Color.FromArgb(70, St.Dim))) g.FillRectangle(bg, x, y, bw, bh);
+                    float f = (float)Math.Max(0, Math.Min(1, cores[c]));
+                    using (SolidBrush fg = new SolidBrush(f > 0.9 ? Color.FromArgb(255, 90, 90) : St.Accent)) g.FillRectangle(fg, x, y + bh * (1 - f), bw, bh * f);
+                }
+            }
+            if (ShowInfo) Txt(g, procs + " processes  " + threads + " threads  up " + (int)up.TotalDays + "d " + up.Hours + "h " + up.Minutes + "m", 11, false, DimB, 2, H - 16);
+        }
+    }
+
+    // ================= RAM (detailed) =================
+    class RamWidget : Widget
+    {
+        double used, total, avail, commit, commitTot; int tickN; List<KeyValuePair<string, long>> top = new List<KeyValuePair<string, long>>();
+        double[] hist = new double[60];
+        public RamWidget(string id) : base(id, "ram", "RAM (detailed)", 240, 220, 1000) { OnTick(); }
+        int TopN { get { return Settings.GetInt(Id + ".topn", 5); } }
+        public override void BuildExtra(Action<string, Control> add)
+        {
+            CheckBox c1 = new CheckBox(); c1.Text = "Show graph"; c1.Checked = Settings.GetBool(Id + ".graph", true);
+            c1.CheckedChanged += delegate { Settings.Set(Id + ".graph", c1.Checked); Settings.Save(); Invalidate(); }; add("", c1);
+            CheckBox c2 = new CheckBox(); c2.Text = "Show top processes by memory"; c2.Checked = Settings.GetBool(Id + ".top", true); c2.Width = 260;
+            c2.CheckedChanged += delegate { Settings.Set(Id + ".top", c2.Checked); Settings.Save(); Invalidate(); }; add("", c2);
+            NumericUpDown n = new NumericUpDown(); n.Minimum = 1; n.Maximum = 15; n.Value = TopN; n.Width = 80;
+            n.ValueChanged += delegate { Settings.Set(Id + ".topn", (int)n.Value); Settings.Save(); Invalidate(); }; add("Processes to list", n);
+        }
+        protected override void OnTick()
+        {
+            Native.MEMSTATUS m = new Native.MEMSTATUS(); m.dwLength = (uint)Marshal.SizeOf(typeof(Native.MEMSTATUS));
+            if (Native.GlobalMemoryStatusEx(ref m))
+            {
+                total = m.ullTotalPhys; avail = m.ullAvailPhys; used = total - avail; commitTot = m.ullTotalPageFile; commit = m.ullTotalPageFile - m.ullAvailPageFile;
+                Array.Copy(hist, 1, hist, 0, hist.Length - 1); hist[hist.Length - 1] = used / total * 100;
+            }
+            if (Settings.GetBool(Id + ".top", true) && tickN++ % 3 == 0)
+            {
+                try
+                {
+                    Dictionary<string, long> d = new Dictionary<string, long>();
+                    foreach (Process p in Process.GetProcesses())
+                    {
+                        try { long w = p.WorkingSet64; long cur; d.TryGetValue(p.ProcessName, out cur); d[p.ProcessName] = cur + w; } catch { }
+                        p.Dispose();
+                    }
+                    List<KeyValuePair<string, long>> l = new List<KeyValuePair<string, long>>(d);
+                    l.Sort(delegate (KeyValuePair<string, long> a, KeyValuePair<string, long> b) { return b.Value.CompareTo(a.Value); });
+                    top = l;
+                }
+                catch { }
+            }
+        }
+        protected override void Draw(Graphics g)
+        {
+            float W = LW, H = LH; double f = total > 0 ? used / total : 0;
+            Ttl(g, "RAM", 2, 0);
+            Txt(g, (f * 100).ToString("0") + "%", 30, true, FgB, 2, 14);
+            Txt(g, Gb(used) + " / " + Gb(total) + " GB", 13, true, FgB, W - 120, 18);
+            Txt(g, "free " + Gb(avail) + " GB", 12, false, DimB, W - 120, 36);
+            Bar(g, 2, 54, W - 4, 8, f);
+            float y = 68;
+            Txt(g, "Commit " + Gb(commit) + " / " + Gb(commitTot) + " GB", 11, false, DimB, 2, y); y += 18;
+            if (Settings.GetBool(Id + ".graph", true)) { float gh = Math.Min(40, H * 0.18f); Spark(g, hist, 2, y, W - 4, gh, 0, 100, St.Accent); y += gh + 6; }
+            if (Settings.GetBool(Id + ".top", true))
+            {
+                int n = Math.Min(TopN, top.Count);
+                for (int i = 0; i < n && y + 16 <= H; i++)
+                {
+                    g.DrawString(top[i].Key, F(12, false), FgB, new RectangleF(2, y, W - 80, 16), new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap });
+                    g.DrawString((top[i].Value / 1048576.0).ToString("0") + " MB", F(12, false), DimB, new RectangleF(W - 80, y, 78, 16), new StringFormat { Alignment = StringAlignment.Far });
+                    y += 16;
+                }
+            }
+        }
+    }
+
+    // ================= Disk I/O =================
+    class DiskIoWidget : Widget
+    {
+        PerformanceCounter rd, wr, act; double r, w, a; double[] hr = new double[60], hw = new double[60]; bool fail;
+        public DiskIoWidget(string id) : base(id, "diskio", "Disk activity", 240, 150, 1000) { }
+        protected override void OnTick()
+        {
+            try
+            {
+                if (rd == null && !fail)
+                {
+                    rd = new PerformanceCounter("PhysicalDisk", "Disk Read Bytes/sec", "_Total"); wr = new PerformanceCounter("PhysicalDisk", "Disk Write Bytes/sec", "_Total");
+                    act = new PerformanceCounter("PhysicalDisk", "% Disk Time", "_Total");
+                }
+                if (rd != null) { r = rd.NextValue(); w = wr.NextValue(); a = Math.Min(100, act.NextValue()); }
+            }
+            catch { fail = true; }
+            Array.Copy(hr, 1, hr, 0, hr.Length - 1); hr[hr.Length - 1] = r; Array.Copy(hw, 1, hw, 0, hw.Length - 1); hw[hw.Length - 1] = w;
+        }
+        static string Fmt(double b) { return b > 1048576 ? (b / 1048576).ToString("0.0") + " MB/s" : (b / 1024).ToString("0") + " KB/s"; }
+        protected override void Draw(Graphics g)
+        {
+            float W = LW, H = LH;
+            Ttl(g, "DISK ACTIVITY", 2, 0);
+            if (fail) { Txt(g, "Counters not available", 12, false, DimB, 2, 24); return; }
+            Txt(g, "Read " + Fmt(r), 14, true, AccB, 2, 18); Txt(g, "Write " + Fmt(w), 14, true, FgB, W / 2, 18);
+            Txt(g, "Busy " + a.ToString("0") + "%", 12, false, DimB, 2, 40); Bar(g, 60, 45, W - 62, 6, a / 100.0);
+            float gy = 60, gh = H - gy - 2; if (gh > 10)
+            {
+                double max = 1048576; foreach (double v in hr) max = Math.Max(max, v); foreach (double v in hw) max = Math.Max(max, v);
+                Spark(g, hr, 2, gy, W - 4, gh, 0, max, St.Accent); Spark(g, hw, 2, gy, W - 4, gh, 0, max, St.Dim);
+            }
+        }
+    }
+
+    // ================= GPU =================
+    class GpuWidget : Widget
+    {
+        List<PerformanceCounter> pcs = new List<PerformanceCounter>(); double g3d; double[] hist = new double[60]; bool fail; int tickN; string name = "";
+        public GpuWidget(string id) : base(id, "gpu", "GPU", 240, 120, 1000)
+        {
+            try
+            {
+                using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11cd-b80c-00805f9fa9cb}\0000"))
+                    if (k != null) name = Convert.ToString(k.GetValue("DriverDesc", ""));
+            }
+            catch { }
+        }
+        protected override void OnTick()
+        {
+            try
+            {
+                if (tickN++ % 10 == 0)
+                {
+                    pcs.Clear();
+                    PerformanceCounterCategory cat = new PerformanceCounterCategory("GPU Engine");
+                    foreach (string inst in cat.GetInstanceNames()) if (inst.EndsWith("engtype_3D")) { try { pcs.Add(new PerformanceCounter("GPU Engine", "Utilization Percentage", inst)); } catch { } }
+                    if (pcs.Count > 0) fail = false; else fail = true;
+                }
+                double sum = 0; foreach (PerformanceCounter p in pcs) { try { sum += p.NextValue(); } catch { } }
+                g3d = Math.Min(100, sum);
+            }
+            catch { fail = true; }
+            Array.Copy(hist, 1, hist, 0, hist.Length - 1); hist[hist.Length - 1] = g3d;
+        }
+        protected override void Draw(Graphics g)
+        {
+            Ttl(g, "GPU", 2, 0);
+            if (name != "") g.DrawString(name, F(11, false), DimB, new RectangleF(40, 3, LW - 42, 16), new StringFormat { Alignment = StringAlignment.Far, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap });
+            if (fail) { Txt(g, "GPU counters not available", 12, false, DimB, 2, 30); return; }
+            Txt(g, g3d.ToString("0") + "%", 30, true, FgB, 2, 14);
+            float gy = 54; Spark(g, hist, 2, gy, LW - 4, LH - gy - 2, 0, 100, St.Accent);
+        }
+    }
+
+    // ================= System info =================
+    class InfoWidget : Widget
+    {
+        string os = "", ip = "", cpuName = ""; TimeSpan up;
+        public InfoWidget(string id) : base(id, "sysinfo", "System info", 260, 170, 5000)
+        {
+            try { os = Convert.ToString(Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName", "Windows")) + " " + Convert.ToString(Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "DisplayVersion", "")); } catch { }
+            try { cpuName = Convert.ToString(Registry.GetValue(@"HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString", "")).Trim(); } catch { }
+            OnTick();
+        }
+        protected override void OnTick()
+        {
+            up = TimeSpan.FromMilliseconds(Native.GetTickCount64());
+            try
+            {
+                foreach (NetworkInterface n in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (n.OperationalStatus != OperationalStatus.Up || n.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    foreach (UnicastIPAddressInformation u in n.GetIPProperties().UnicastAddresses)
+                        if (u.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) { ip = u.Address.ToString() + " (" + n.Name + ")"; return; }
+                }
+                ip = "offline";
+            }
+            catch { }
+        }
+        protected override void Draw(Graphics g)
+        {
+            Ttl(g, "SYSTEM", 2, 0);
+            Native.MEMSTATUS m = new Native.MEMSTATUS(); m.dwLength = (uint)Marshal.SizeOf(typeof(Native.MEMSTATUS)); Native.GlobalMemoryStatusEx(ref m);
+            string[] k = { "PC", "User", "OS", "CPU", "RAM", "Screen", "IP", "Uptime" };
+            string[] v = { Environment.MachineName, Environment.UserName, os, cpuName + " (" + Environment.ProcessorCount + " threads)", Gb(m.ullTotalPhys) + " GB", Screen.PrimaryScreen.Bounds.Width + " x " + Screen.PrimaryScreen.Bounds.Height, ip, (int)up.TotalDays + "d " + up.Hours + "h " + up.Minutes + "m" };
+            float rh = Math.Min(20, (LH - 18) / k.Length); float y = 18;
+            for (int i = 0; i < k.Length; i++)
+            {
+                Txt(g, k[i], 11, true, DimB, 2, y + 1);
+                g.DrawString(v[i], F(11, false), FgB, new RectangleF(52, y + 1, LW - 54, rh), new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap });
+                y += rh;
+            }
+        }
+    }
+
+    // ================= Ping =================
+    class PingWidget : Widget
+    {
+        System.Net.NetworkInformation.Ping ping = new System.Net.NetworkInformation.Ping(); bool pending; double last = -1; double[] hist = new double[60]; int sent, lost;
+        string Host { get { return Settings.Get(Id + ".host", "1.1.1.1"); } }
+        public PingWidget(string id) : base(id, "ping", "Ping", 240, 120, 2000)
+        {
+            ping.PingCompleted += delegate (object o, System.Net.NetworkInformation.PingCompletedEventArgs e)
+            {
+                pending = false; sent++;
+                if (!e.Cancelled && e.Error == null && e.Reply != null && e.Reply.Status == IPStatus.Success) last = e.Reply.RoundtripTime; else { last = -1; lost++; }
+                Array.Copy(hist, 1, hist, 0, hist.Length - 1); hist[hist.Length - 1] = last < 0 ? 0 : last;
+            };
+        }
+        public override void BuildExtra(Action<string, Control> add)
+        {
+            TextBox tb = new TextBox(); tb.Width = 220; tb.Text = Host;
+            tb.TextChanged += delegate { Settings.Set(Id + ".host", tb.Text.Trim()); Settings.Save(); sent = 0; lost = 0; };
+            add("Host to ping", tb);
+        }
+        protected override void OnTick()
+        {
+            if (pending) return;
+            try { pending = true; ping.SendAsync(Host, 1500, null); } catch { pending = false; }
+        }
+        protected override void Draw(Graphics g)
+        {
+            Ttl(g, "PING  " + Host, 2, 0);
+            Txt(g, last < 0 ? (sent == 0 ? "..." : "timeout") : last.ToString("0") + " ms", 28, true, last < 0 && sent > 0 ? new SolidBrush(Color.FromArgb(255, 90, 90)) : FgB, 2, 14);
+            Txt(g, "loss " + (sent == 0 ? 0 : lost * 100 / sent) + "%", 12, false, DimB, LW - 70, 24);
+            float gy = 54; Spark(g, hist, 2, gy, LW - 4, LH - gy - 2, 0, 50, St.Accent);
         }
     }
 
@@ -864,6 +1298,12 @@ namespace DesktopWidgets
             TrackBar t = new TrackBar(); t.Minimum = min; t.Maximum = max; t.Value = Math.Max(min, Math.Min(max, val)); t.Width = 230; t.TickStyle = TickStyle.None; t.AutoSize = false; t.Height = 26;
             t.ValueChanged += delegate { on(t.Value); w.Restyle(); };
             return t;
+        }
+        NumericUpDown Num(int min, int max, int val, Action<int> on)
+        {
+            NumericUpDown n = new NumericUpDown(); n.Minimum = min; n.Maximum = max; n.Value = Math.Max(min, Math.Min(max, val)); n.Width = 90;
+            n.ValueChanged += delegate { on((int)n.Value); w.Restyle(); };
+            return n;
         }
         Button ColorBtn(Color init, Action<Color> on)
         {
@@ -902,10 +1342,27 @@ namespace DesktopWidgets
             ComboBox sh = new ComboBox(); sh.DropDownStyle = ComboBoxStyle.DropDownList; sh.Width = 220; sh.Items.AddRange(Sty.ShapeNames); sh.SelectedIndex = s.Shape;
             sh.SelectedIndexChanged += delegate { s.Shape = sh.SelectedIndex; w.Restyle(); };
             Add("Shape", sh);
-            Add("Corner radius", Track(0, 100, s.Radius, delegate (int v) { s.Radius = v; }));
-            Add("Width (px)", Track(60, 900, s.W, delegate (int v) { s.W = v; }));
-            Add("Height (px)", Track(40, 900, s.H, delegate (int v) { s.H = v; }));
-            Add("Text / content size %", Track(40, 300, s.FontPct, delegate (int v) { s.FontPct = v; }));
+            NumericUpDown nw = Num(60, 3000, s.W, delegate (int v) { s.W = v; });
+            NumericUpDown nh = Num(40, 3000, s.H, delegate (int v) { s.H = v; });
+            Add("Width (exact px)", nw);
+            Add("Height (exact px)", nh);
+            ComboBox pre = new ComboBox(); pre.DropDownStyle = ComboBoxStyle.DropDownList; pre.Width = 220;
+            string[] pn = { "Small 160x90", "Medium 240x120", "Large 320x160", "Wide 400x120", "Tall 160x260", "Square 200x200", "Big square 320x320", "Banner 520x90" };
+            int[][] pv = { new[] { 160, 90 }, new[] { 240, 120 }, new[] { 320, 160 }, new[] { 400, 120 }, new[] { 160, 260 }, new[] { 200, 200 }, new[] { 320, 320 }, new[] { 520, 90 } };
+            pre.Items.AddRange(pn);
+            pre.SelectedIndexChanged += delegate { nw.Value = pv[pre.SelectedIndex][0]; nh.Value = pv[pre.SelectedIndex][1]; };
+            Add("Size preset", pre);
+            Button sameW = new Button(); sameW.Text = "Make ALL widgets this width"; sameW.Width = 220;
+            sameW.Click += delegate { foreach (Widget o in Program.Widgets) if (o != w) { o.St.W = s.W; o.Restyle(); } };
+            Add("", sameW);
+            Button sameS = new Button(); sameS.Text = "Make ALL widgets this exact size"; sameS.Width = 220;
+            sameS.Click += delegate { foreach (Widget o in Program.Widgets) if (o != w) { o.St.W = s.W; o.St.H = s.H; o.Restyle(); } };
+            Add("", sameS);
+            Label hint = new Label(); hint.Text = "Tip: you can also drag any widget edge or corner to resize it."; hint.AutoSize = true; hint.ForeColor = SystemColors.GrayText; Add("", hint);
+            Add("Position X (px)", Num(-5000, 10000, w.Left, delegate (int v) { w.Left = v; w.SavePos(); }));
+            Add("Position Y (px)", Num(-5000, 10000, w.Top, delegate (int v) { w.Top = v; w.SavePos(); }));
+            Add("Content size % (text and graphics)", Num(30, 500, s.FontPct, delegate (int v) { s.FontPct = v; }));
+            Add("Corner radius (px)", Num(0, 300, s.Radius, delegate (int v) { s.Radius = v; }));
             Add("Inner padding", Track(0, 80, s.Pad, delegate (int v) { s.Pad = v; }));
 
             Section("Background and glass");
@@ -922,6 +1379,14 @@ namespace DesktopWidgets
             Add("Accent color", ColorBtn(s.Accent, delegate (Color c) { s.Accent = c; }));
             CheckBox bar = new CheckBox(); bar.Text = "Accent strip on top"; bar.Checked = s.Bar; bar.CheckedChanged += delegate { s.Bar = bar.Checked; w.Restyle(); };
             Add("", bar);
+            ComboBox bp = new ComboBox(); bp.DropDownStyle = ComboBoxStyle.DropDownList; bp.Width = 220; bp.Items.AddRange(new object[] { "Top", "Bottom", "Left", "Right" }); bp.SelectedIndex = s.BarPos;
+            bp.SelectedIndexChanged += delegate { s.BarPos = bp.SelectedIndex; w.Restyle(); }; Add("Accent strip position", bp);
+            Add("Accent strip thickness", Num(1, 40, s.BarW, delegate (int v) { s.BarW = v; }));
+            ComboBox gr = new ComboBox(); gr.DropDownStyle = ComboBoxStyle.DropDownList; gr.Width = 220; gr.Items.AddRange(new object[] { "None", "Vertical", "Horizontal", "Diagonal" }); gr.SelectedIndex = s.Grad;
+            gr.SelectedIndexChanged += delegate { s.Grad = gr.SelectedIndex; w.Restyle(); }; Add("Background gradient (Solid type)", gr);
+            Add("Gradient second color", ColorBtn(s.Bg2, delegate (Color c) { s.Bg2 = c; }));
+            CheckBox ti = new CheckBox(); ti.Text = "Show widget title"; ti.Checked = s.ShowTitle; ti.CheckedChanged += delegate { s.ShowTitle = ti.Checked; w.Restyle(); }; Add("", ti);
+            CheckBox bd = new CheckBox(); bd.Text = "Bold text everywhere"; bd.Checked = s.Bold; bd.CheckedChanged += delegate { s.Bold = bd.Checked; w.Restyle(); }; Add("", bd);
 
             Section("Border");
             Add("Border width", Track(0, 10, s.BorderW, delegate (int v) { s.BorderW = v; }));
@@ -955,8 +1420,8 @@ namespace DesktopWidgets
     {
         public static List<Widget> Widgets = new List<Widget>();
         static NotifyIcon tray;
-        static readonly string[] Types = { "clock", "system", "network", "disk", "battery", "calendar", "notes", "stopwatch" };
-        static readonly string[] TypeTitles = { "Clock", "System (CPU/RAM)", "Network", "Disks", "Battery", "Calendar", "Notes", "Stopwatch" };
+        static readonly string[] Types = { "clock", "system", "cpu", "ram", "gpu", "diskio", "network", "ping", "disk", "battery", "calendar", "notes", "stopwatch", "sysinfo" };
+        static readonly string[] TypeTitles = { "Clock", "System (CPU + RAM)", "CPU (detailed, per-core)", "RAM (detailed, top processes)", "GPU", "Disk activity", "Network", "Ping", "Disks (space)", "Battery", "Calendar", "Notes", "Stopwatch", "System info" };
 
         static Widget Make(string type, string id)
         {
@@ -964,6 +1429,12 @@ namespace DesktopWidgets
             {
                 case "clock": return new ClockWidget(id);
                 case "system": return new SystemWidget(id);
+                case "cpu": return new CpuWidget(id);
+                case "ram": return new RamWidget(id);
+                case "gpu": return new GpuWidget(id);
+                case "diskio": return new DiskIoWidget(id);
+                case "ping": return new PingWidget(id);
+                case "sysinfo": return new InfoWidget(id);
                 case "network": return new NetWidget(id);
                 case "disk": return new DiskWidget(id);
                 case "battery": return new BatteryWidget(id);
@@ -1013,7 +1484,7 @@ namespace DesktopWidgets
             foreach (Widget w in Widgets)
             {
                 w.Init();
-                if (Settings.GetBool(w.Id + ".visible", w.Id == "clock" || w.Id == "system" || w.Id == "network" || w.Id == "calendar")) w.Show();
+                if (Settings.GetBool(w.Id + ".visible", w.Id == "clock" || w.Id == "system" || w.Id == "network" || w.Id == "calendar" || w.Id == "cpu" || w.Id == "ram")) w.Show();
             }
 
             tray = new NotifyIcon();
