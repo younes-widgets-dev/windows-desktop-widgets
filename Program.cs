@@ -943,6 +943,7 @@ namespace DesktopWidgets
             save = new Timer(); save.Interval = 800;
             save.Tick += delegate { save.Stop(); try { Directory.CreateDirectory(Path.GetDirectoryName(Settings.NotesPath(Id))); File.WriteAllText(Settings.NotesPath(Id), tb.Text); } catch { } };
             tb.TextChanged += delegate { save.Stop(); save.Start(); };
+            SizeChanged += delegate { DoLayout(); };
         }
         protected override void OnRestyled() { DoLayout(); }
         public override void ApplyStyle() { base.ApplyStyle(); DoLayout(); }
