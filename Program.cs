@@ -813,7 +813,7 @@ namespace DesktopWidgets
             float fs = (float)Fs;
             tb.Left = (int)(St.Pad + 8 * fs); tb.Top = (int)(St.Pad + 28 * fs);
             tb.Width = Math.Max(20, Width - 2 * St.Pad - (int)(16 * fs)); tb.Height = Math.Max(20, Height - 2 * St.Pad - (int)(36 * fs));
-            tb.BackColor = St.Mode == 0 ? St.Bg : Color.FromArgb(255, Math.Min(255, St.Bg.R), Math.Min(255, St.Bg.G), Math.Min(255, St.Bg.B));
+            tb.BackColor = Color.FromArgb(255, St.Bg.R, St.Bg.G, St.Bg.B);
             tb.ForeColor = St.Fg;
             try { tb.Font = new Font(St.Font, 12f * fs, FontStyle.Regular, GraphicsUnit.Pixel); } catch { }
         }
