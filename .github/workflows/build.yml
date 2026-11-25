@@ -1,0 +1,36 @@
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: dotnet build DesktopWidgets.csproj -c Release -o out
+      - name: Package
+        shell: pwsh
+        run: |
+          Copy-Item README.md out/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path out/DesktopWidgets.exe,out/DesktopWidgets.exe.config -DestinationPath DesktopWidgets.zip -ErrorAction SilentlyContinue
+          if (!(Test-Path DesktopWidgets.zip)) { Compress-Archive -Path out/DesktopWidgets.exe -DestinationPath DesktopWidgets.zip }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DesktopWidgets
+          path: |
+            out/DesktopWidgets.exe
+            DesktopWidgets.zip
+      - name: Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: DesktopWidgets (latest build)
+          files: |
+            out/DesktopWidgets.exe
+            DesktopWidgets.zip
