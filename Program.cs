@@ -14,6 +14,24 @@ using Microsoft.Win32;
 
 namespace DesktopWidgets
 {
+    static class Crash
+    {
+        static readonly string LogDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DesktopWidgets");
+        public static void Log(object ex)
+        {
+            try { Directory.CreateDirectory(LogDir); string f = Path.Combine(LogDir, "error.log"); try { if (File.Exists(f) && new FileInfo(f).Length > 500000) File.Delete(f); } catch { } File.AppendAllText(f, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + ex + "\r\n\r\n"); } catch { }
+        }
+        public static void Install()
+        {
+            try
+            {
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { Log(e.Exception); };
+                AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs e) { Log(e.ExceptionObject); };
+            }
+            catch { }
+        }
+    }
     // ================= Settings =================
     static class Settings
     {
@@ -1754,6 +1772,7 @@ namespace DesktopWidgets
             bool created;
             System.Threading.Mutex mx = new System.Threading.Mutex(true, "DesktopWidgets_single_instance", out created);
             if (!created) return;
+            Crash.Install();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Settings.Load();
