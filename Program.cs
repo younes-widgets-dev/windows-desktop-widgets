@@ -1782,7 +1782,7 @@ namespace DesktopWidgets
                 Settings.Set("ver", 4); Settings.Save();
             }
             if (!Settings.GetBool("autostart_init", false)) { SetAutostart(true); Settings.Set("autostart_init", true); Settings.Save(); }
-            else if (IsAutostart()) SetAutostart(true);
+            else { AutoDiag(); if (IsAutostart()) SetAutostart(true); }
 
             string removed = "," + Settings.Get("removed", "") + ",";
             for (int i = 0; i < Types.Length; i++) if (!removed.Contains("," + Types[i] + ",")) Widgets.Add(Make(Types[i], Types[i]));
@@ -1841,7 +1841,27 @@ namespace DesktopWidgets
         {
             try { using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue("DesktopWidgets") != null; } catch { return false; }
         }
-        public static void SetAutostart(bool on)
+                static void Approve()
+        {
+            try { using (RegistryKey k = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")) k.SetValue("DesktopWidgets", new byte[] { 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, RegistryValueKind.Binary); } catch { }
+        }
+        public static void AutoDiag()
+        {
+            try
+            {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DesktopWidgets"); Directory.CreateDirectory(dir);
+                object run = null, ap = null;
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run")) { if (k != null) run = k.GetValue("DesktopWidgets"); }
+                using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run")) { if (k != null) ap = k.GetValue("DesktopWidgets"); }
+                byte[] b = ap as byte[]; string st = b == null ? "none" : BitConverter.ToString(b);
+                string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  started; uptime " + ((uint)Environment.TickCount / 60000) + " min; exe=" + Application.ExecutablePath + "; Run=" + (run == null ? "missing" : "present") + "; StartupApproved=" + st + (b != null && b.Length > 0 && (b[0] & 1) == 1 ? " (DISABLED by Windows)" : "") + "\r\n";
+                string f = Path.Combine(dir, "startup.log"); try { if (File.Exists(f) && new FileInfo(f).Length > 50000) File.Delete(f); } catch { }
+                File.AppendAllText(f, line);
+            }
+            catch { }
+        }
+        public static void SetAutostart(bool on) { SetAutostartRaw(on); if (on) Approve(); }
+        static void SetAutostartRaw(bool on)
         {
             try
             {
