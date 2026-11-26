@@ -41,8 +41,12 @@ jobs:
           $p = Start-Process out\DesktopWidgets.exe -PassThru
           Start-Sleep -Seconds 10
           Shot s1_start
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep -Seconds 3
+          Shot s1b_desktop
           Write-Host "alive after 10s:" (-not $p.HasExited)
-          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 3
+          Shot s2_later
           Start-Sleep -Seconds 2
           Write-Host "alive at end:" (-not $p.HasExited)
           foreach ($f in Get-ChildItem "$env:APPDATA\DesktopWidgets" -Filter *.log -ErrorAction SilentlyContinue) { Write-Host "=== $($f.Name)"; Get-Content $f.FullName }
