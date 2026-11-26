@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
@@ -80,6 +81,48 @@ namespace DesktopWidgets
         }
         [DllImport("kernel32.dll")] public static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
         public const int WS_EX_TOOLWINDOW = 0x80;
+        [StructLayout(LayoutKind.Sequential)] struct PT { public int x, y; }
+        [StructLayout(LayoutKind.Sequential)] struct SZ { public int cx, cy; }
+        [StructLayout(LayoutKind.Sequential, Pack = 1)] struct BLEND { public byte Op, Flags, Alpha, Fmt; }
+        [StructLayout(LayoutKind.Sequential)] struct BB { public int Flags; public int Enable; public IntPtr Rgn; public int Trans; }
+        [DllImport("user32.dll", SetLastError = true)] static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref PT pptDst, ref SZ psize, IntPtr hdcSrc, ref PT pptSrc, int crKey, ref BLEND pblend, int dwFlags);
+        [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr h);
+        [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr h, IntPtr dc);
+        [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+        [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr o);
+        [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr o);
+        [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
+        [DllImport("dwmapi.dll")] static extern int DwmEnableBlurBehindWindow(IntPtr h, ref BB bb);
+        public static void Present(Form f, Bitmap bmp, byte alpha)
+        {
+            IntPtr scr = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(scr), hb = IntPtr.Zero, old = IntPtr.Zero;
+            try
+            {
+                hb = bmp.GetHbitmap(Color.FromArgb(0)); old = SelectObject(mem, hb);
+                PT dst = new PT(); dst.x = f.Left; dst.y = f.Top; SZ size = new SZ(); size.cx = bmp.Width; size.cy = bmp.Height; PT src = new PT();
+                BLEND bl = new BLEND(); bl.Op = 0; bl.Flags = 0; bl.Alpha = alpha; bl.Fmt = 1;
+                UpdateLayeredWindow(f.Handle, scr, ref dst, ref size, mem, ref src, 0, ref bl, 2);
+            }
+            finally
+            {
+                if (old != IntPtr.Zero) SelectObject(mem, old);
+                if (hb != IntPtr.Zero) DeleteObject(hb);
+                DeleteDC(mem); ReleaseDC(IntPtr.Zero, scr);
+            }
+        }
+        public static void Blur(Form f, bool on, GraphicsPath shape)
+        {
+            try
+            {
+                BB bb = new BB(); IntPtr hr = IntPtr.Zero; Region rg = null;
+                if (on) { rg = new Region(shape); using (Graphics g = Graphics.FromHwnd(f.Handle)) hr = rg.GetHrgn(g); bb.Flags = 3; bb.Enable = 1; bb.Rgn = hr; }
+                else { bb.Flags = 1; bb.Enable = 0; }
+                DwmEnableBlurBehindWindow(f.Handle, ref bb);
+                if (hr != IntPtr.Zero) DeleteObject(hr);
+                if (rg != null) rg.Dispose();
+            }
+            catch { }
+        }
         [DllImport("kernel32.dll")] public static extern ulong GetTickCount64();
 
         [StructLayout(LayoutKind.Sequential)]
@@ -330,7 +373,7 @@ namespace DesktopWidgets
 
         protected override CreateParams CreateParams
         {
-            get { CreateParams cp = base.CreateParams; cp.ExStyle |= Native.WS_EX_TOOLWINDOW; return cp; }
+            get { CreateParams cp = base.CreateParams; cp.ExStyle |= Native.WS_EX_TOOLWINDOW | 0x80000; return cp; }
         }
         protected override bool ShowWithoutActivation { get { return true; } }
 
@@ -341,25 +384,20 @@ namespace DesktopWidgets
             foreach (Font f in fonts.Values) f.Dispose();
             fonts.Clear();
             ClientSize = new Size(Math.Max(60, St.W), Math.Max(40, St.H));
-            using (GraphicsPath p = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height)))
-                Region = new Region(p);
             bool accent = St.Mode > 0;
             BackColor = accent ? Color.Black : St.Bg;
             TopMost = St.Top;
-            if (!accent) Opacity = Math.Max(0.2, Math.Min(1.0, St.Opacity)); else if (Opacity < 1.0) Opacity = 1.0;
-            if (IsHandleCreated) ApplyAccent();
+            if (IsHandleCreated) UpdateBlur();
             Tick.Interval = Math.Max(50, St.Interval);
             LW = (float)((Width - 2 * St.Pad) / Fs); LH = (float)((Height - 2 * St.Pad) / Fs);
             Invalidate();
         }
-        void ApplyAccent()
+        public void UpdateBlur()
         {
-            if (St.Mode == 0) Native.SetAccent(Handle, 0, Color.Black);
-            else if (St.Mode == 1) Native.SetAccent(Handle, 2, Color.FromArgb(St.BgAlpha, St.Bg));
-            else if (St.Mode == 2) Native.SetAccent(Handle, 3, Color.FromArgb(St.BgAlpha, St.Bg));
-            else Native.SetAccent(Handle, 4, Color.FromArgb(St.BgAlpha, St.Bg));
+            if (!IsHandleCreated) return;
+            using (GraphicsPath p = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height))) Native.Blur(this, St.Mode >= 2, p);
         }
-        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); ApplyAccent(); }
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); UpdateBlur(); }
 
         public void Restyle() { St.Save(Id); ApplyStyle(); OnRestyled(); }
         protected virtual void OnRestyled() { }
@@ -420,43 +458,54 @@ namespace DesktopWidgets
             if (frac > 0.003) using (Pen p = new Pen(c, width)) { p.StartCap = LineCap.Round; p.EndCap = LineCap.Round; g.DrawArc(p, r, -90, (float)(360 * Math.Min(1, frac))); }
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        protected override void OnPaint(PaintEventArgs e) { Render(); }
+        void Render()
         {
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            g.Clear(St.Mode > 0 ? Color.Black : St.Bg);
-            if (St.Mode == 0 && St.Grad > 0)
+            if (!IsHandleCreated || !Visible || Width < 2 || Height < 2) return;
+            using (Bitmap bmp = new Bitmap(Width, Height, PixelFormat.Format32bppPArgb))
+            using (Graphics g = Graphics.FromImage(bmp))
             {
-                float ang = St.Grad == 1 ? 90f : (St.Grad == 2 ? 0f : 45f);
-                using (LinearGradientBrush gb = new LinearGradientBrush(new Rectangle(0, 0, Width + 1, Height + 1), St.Bg, St.Bg2, ang)) g.FillRectangle(gb, 0, 0, Width + 1, Height + 1);
-            }
-            using (GraphicsPath path = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height)))
-            {
-                if (St.Bar)
+                g.SmoothingMode = SmoothingMode.AntiAlias; g.PixelOffsetMode = PixelOffsetMode.HighQuality; g.CompositingQuality = CompositingQuality.HighQuality;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit; g.Clear(Color.Transparent);
+                using (GraphicsPath path = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height)))
                 {
-                    GraphicsState s = g.Save();
-                    g.SetClip(path, CombineMode.Intersect);
-                    int bw = Math.Max(1, (int)(St.BarW * Fs));
-                    using (SolidBrush b = new SolidBrush(St.Accent))
+                    if (St.Mode == 0 && St.Grad > 0)
                     {
-                        if (St.BarPos == 0) g.FillRectangle(b, 0, 0, Width, bw);
-                        else if (St.BarPos == 1) g.FillRectangle(b, 0, Height - bw, Width, bw);
-                        else if (St.BarPos == 2) g.FillRectangle(b, 0, 0, bw, Height);
-                        else g.FillRectangle(b, Width - bw, 0, bw, Height);
+                        float ang = St.Grad == 1 ? 90f : (St.Grad == 2 ? 0f : 45f);
+                        using (LinearGradientBrush gb = new LinearGradientBrush(new Rectangle(0, 0, Width + 1, Height + 1), St.Bg, St.Bg2, ang)) g.FillPath(gb, path);
                     }
-                    g.Restore(s);
+                    else using (SolidBrush sb = new SolidBrush(St.Mode == 0 ? St.Bg : Color.FromArgb(St.BgAlpha, St.Bg))) g.FillPath(sb, path);
+                    if (St.Bar)
+                    {
+                        GraphicsState s = g.Save();
+                        g.SetClip(path, CombineMode.Intersect);
+                        int bw = Math.Max(1, (int)(St.BarW * Fs));
+                        using (SolidBrush b = new SolidBrush(Ov("barstrip", St.Accent)))
+                        {
+                            if (St.BarPos == 0) g.FillRectangle(b, 0, 0, Width, bw);
+                            else if (St.BarPos == 1) g.FillRectangle(b, 0, Height - bw, Width, bw);
+                            else if (St.BarPos == 2) g.FillRectangle(b, 0, 0, bw, Height);
+                            else g.FillRectangle(b, Width - bw, 0, bw, Height);
+                        }
+                        g.Restore(s);
+                    }
+                    if (St.BorderW > 0)
+                    {
+                        float hw = St.BorderW / 2f;
+                        using (GraphicsPath bp = Shapes.Make(St.Shape, St.Radius, new RectangleF(hw, hw, Width - St.BorderW, Height - St.BorderW)))
+                        using (Pen pen = new Pen(St.Border, St.BorderW)) { pen.LineJoin = LineJoin.Round; g.DrawPath(pen, bp); }
+                    }
+                    g.SetClip(path);
                 }
-                if (St.BorderW > 0)
-                {
-                    float hw = St.BorderW / 2f;
-                    using (GraphicsPath bp = Shapes.Make(St.Shape, St.Radius, new RectangleF(hw, hw, Width - St.BorderW, Height - St.BorderW)))
-                    using (Pen pen = new Pen(St.Border, St.BorderW)) { pen.LineJoin = LineJoin.Round; g.DrawPath(pen, bp); }
-                }
+                g.TranslateTransform(St.Pad, St.Pad);
+                g.ScaleTransform((float)Fs, (float)Fs);
+                Draw(g);
+                g.ResetTransform();
+                Native.Present(this, bmp, (byte)(St.Mode == 0 ? Math.Max(20, Math.Min(100, (int)Math.Round(St.Opacity * 100))) * 255 / 100 : 255));
             }
-            g.TranslateTransform(St.Pad, St.Pad);
-            g.ScaleTransform((float)Fs, (float)Fs);
-            Draw(g);
+        }
+        void Unused(Graphics g)
+        {
         }
 
         int edge; // 1 L, 2 R, 4 T, 8 B
@@ -480,7 +529,7 @@ namespace DesktopWidgets
         {
             St.W = Math.Max(60, w); St.H = Math.Max(40, h);
             ClientSize = new Size(St.W, St.H);
-            using (GraphicsPath p = Shapes.Make(St.Shape, St.Radius, new RectangleF(0, 0, Width, Height))) Region = new Region(p);
+            UpdateBlur();
             LW = (float)((Width - 2 * St.Pad) / Fs); LH = (float)((Height - 2 * St.Pad) / Fs);
             Invalidate();
         }
@@ -525,7 +574,8 @@ namespace DesktopWidgets
             dragging = false; edge = 0;
             base.OnMouseUp(e);
         }
-        protected override void OnShown(EventArgs e) { base.OnShown(e); SendBack(); }
+        protected override void OnShown(EventArgs e) { base.OnShown(e); SendBack(); UpdateBlur(); Invalidate(); }
+        public new void Invalidate() { Render(); }
         protected override void OnActivated(EventArgs e) { base.OnActivated(e); SendBack(); }
         void SendBack()
         {
