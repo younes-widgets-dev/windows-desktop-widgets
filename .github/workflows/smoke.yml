@@ -1,0 +1,53 @@
+name: smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: dotnet build DesktopWidgets.csproj -c Release -o out
+      - name: Run and test
+        shell: pwsh
+        continue-on-error: true
+        env:
+          MENUSTUDIO_TEST: "1"
+          PCCARE_TEST: "1"
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type -TypeDefinition @"
+          using System; using System.Runtime.InteropServices;
+          public class M {
+            [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+            [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
+            [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr e);
+          }
+          "@
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$pwd\shots\$name.png")
+          }
+          function RClick($x, $y) { [M]::SetCursorPos($x, $y); Start-Sleep -Milliseconds 300; [M]::mouse_event(8,0,0,0,[UIntPtr]::Zero); [M]::mouse_event(16,0,0,0,[UIntPtr]::Zero) }
+          function LClick($x, $y) { [M]::SetCursorPos($x, $y); Start-Sleep -Milliseconds 300; [M]::mouse_event(2,0,0,0,[UIntPtr]::Zero); [M]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
+          New-Item shots -ItemType Directory -Force | Out-Null
+          Write-Host "screen:" ([System.Windows.Forms.Screen]::PrimaryScreen.Bounds)
+          Write-Host "explorer running:" ((Get-Process explorer -ErrorAction SilentlyContinue) -ne $null)
+          $p = Start-Process out\DesktopWidgets.exe -PassThru
+          Start-Sleep -Seconds 10
+          Shot s1_start
+          Write-Host "alive after 10s:" (-not $p.HasExited)
+          Start-Sleep -Seconds 5
+          Start-Sleep -Seconds 2
+          Write-Host "alive at end:" (-not $p.HasExited)
+          foreach ($f in Get-ChildItem "$env:APPDATA\DesktopWidgets" -Filter *.log -ErrorAction SilentlyContinue) { Write-Host "=== $($f.Name)"; Get-Content $f.FullName }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: shots/
