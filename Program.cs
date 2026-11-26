@@ -119,6 +119,8 @@ namespace DesktopWidgets
         public bool Top, Lock, Bar = true, ShowTitle = true, Bold = false;
         public int BarPos = 0, BarW = 3, Grad = 0;
         public Color Bg2 = Color.FromArgb(48, 52, 66);
+        public Dictionary<string, int> Ov = new Dictionary<string, int>();
+        public static readonly string[] OvKeys = { "value", "label", "title", "barfill", "barbg", "warn", "graph", "ring", "accent2", "hourhand", "minhand", "sechand", "ticks", "numerals", "face", "dot", "cpu", "ram", "gpu", "cellbg", "divider" };
 
         public static readonly string[] ShapeNames = { "Rounded", "Rectangle", "Pill", "Ellipse / Circle", "Hexagon", "Octagon", "Diamond", "Cut corners", "Leaf", "Tab (top)", "Squircle", "Parallelogram", "Pentagon", "Trapezoid", "Pill (left)", "Tab (bottom)", "Ticket", "Shield", "Star", "Triangle", "Pill (right)", "Diagonal corners" };
         public static readonly string[] ModeNames = { "Solid", "Transparent tint", "Blur (glass)", "Acrylic (frosted glass)" };
@@ -139,6 +141,7 @@ namespace DesktopWidgets
             Top = Settings.GetBool(id + ".top", false); Lock = Settings.GetBool(id + ".locked", false); Bar = Settings.GetBool(id + ".bar", Bar);
             ShowTitle = Settings.GetBool(id + ".title", true); Bold = Settings.GetBool(id + ".bold", false);
             BarPos = Settings.GetInt(id + ".barpos", 0); BarW = Settings.GetInt(id + ".barw", 3); Grad = Settings.GetInt(id + ".grad", 0); Bg2 = Color.FromArgb(Settings.GetInt(id + ".bg2", C(Bg2)));
+            Ov.Clear(); foreach (string k in OvKeys) { int v = Settings.GetInt(id + ".c." + k, 0); if (v != 0) Ov[k] = v; }
         }
         public void Save(string id)
         {
@@ -149,18 +152,19 @@ namespace DesktopWidgets
             Settings.Set(id + ".font", Font); Settings.Set(id + ".opacity100", (int)Math.Round(Opacity * 100));
             Settings.Set(id + ".top", Top); Settings.Set(id + ".locked", Lock); Settings.Set(id + ".bar", Bar);
             Settings.Set(id + ".title", ShowTitle); Settings.Set(id + ".bold", Bold); Settings.Set(id + ".barpos", BarPos); Settings.Set(id + ".barw", BarW); Settings.Set(id + ".grad", Grad); Settings.Set(id + ".bg2", C(Bg2));
+            foreach (string k in OvKeys) { int v; Settings.Set(id + ".c." + k, Ov.TryGetValue(k, out v) ? v : 0); }
             Settings.Save();
         }
         public void CopyLookFrom(Sty o)
         {
             Shape = o.Shape; Radius = o.Radius; Mode = o.Mode; BgAlpha = o.BgAlpha; BorderW = o.BorderW; Pad = o.Pad; FontPct = o.FontPct;
-            Bg = o.Bg; Fg = o.Fg; Dim = o.Dim; Accent = o.Accent; Border = o.Border; Font = o.Font; Opacity = o.Opacity; Bar = o.Bar; ShowTitle = o.ShowTitle; Bold = o.Bold; BarPos = o.BarPos; BarW = o.BarW; Grad = o.Grad; Bg2 = o.Bg2;
+            Bg = o.Bg; Fg = o.Fg; Dim = o.Dim; Accent = o.Accent; Border = o.Border; Font = o.Font; Opacity = o.Opacity; Bar = o.Bar; ShowTitle = o.ShowTitle; Bold = o.Bold; BarPos = o.BarPos; BarW = o.BarW; Grad = o.Grad; Bg2 = o.Bg2; Ov = new Dictionary<string, int>(o.Ov);
         }
 
         public static readonly string[] ThemeNames = { "Dark", "Light", "Acrylic dark", "Acrylic light", "Blur glass", "Clear (text only)", "Neon", "Terminal", "Sunset", "Pastel", "Midnight", "Paper", "Dracula", "Nord", "Solarized dark", "Solarized light", "Gruvbox", "Monokai", "Cyberpunk", "Ocean gradient", "Forest gradient", "Rose gold", "Matrix", "Mono black", "Mono white", "High contrast", "Aqua glass", "Crimson glass", "Retro amber", "Violet gradient", "Sunrise gradient", "Slate" };
         public void ApplyTheme(string name)
         {
-            Mode = 0; BgAlpha = 160; Shape = 0; Radius = 14; BorderW = 0; Bar = true; Opacity = 0.95; Pad = 0; Grad = 0; BarPos = 0; BarW = 3; ShowTitle = true; Bold = false; Bg2 = Color.FromArgb(48, 52, 66);
+            Ov.Clear(); Mode = 0; BgAlpha = 160; Shape = 0; Radius = 14; BorderW = 0; Bar = true; Opacity = 0.95; Pad = 0; Grad = 0; BarPos = 0; BarW = 3; ShowTitle = true; Bold = false; Bg2 = Color.FromArgb(48, 52, 66);
             Border = Color.FromArgb(90, 255, 255, 255); Font = "Segoe UI";
             switch (name)
             {
@@ -304,6 +308,25 @@ namespace DesktopWidgets
         }
 
         public void Init() { ApplyStyle(); BuildMenu(); }
+        public Color Ov(string k, Color d) { int v; return St.Ov.TryGetValue(k, out v) && v != 0 ? Color.FromArgb(v) : d; }
+        public Control OvPicker(string key, Color def)
+        {
+            FlowLayoutPanel fp = new FlowLayoutPanel(); fp.AutoSize = true; fp.WrapContents = false; fp.Margin = new Padding(0);
+            Button b = new Button(); b.Width = 110; b.Height = 24; b.FlatStyle = FlatStyle.Flat; b.Text = St.Ov.ContainsKey(key) ? "" : "default";
+            b.BackColor = Ov(key, def);
+            b.Click += delegate
+            {
+                using (ColorDialog cd = new ColorDialog())
+                {
+                    cd.Color = b.BackColor; cd.FullOpen = true;
+                    if (cd.ShowDialog() == DialogResult.OK) { St.Ov[key] = Color.FromArgb(255, cd.Color).ToArgb(); b.BackColor = cd.Color; b.Text = ""; Restyle(); }
+                }
+            };
+            Button r = new Button(); r.Text = "Reset"; r.Width = 54; r.Height = 24;
+            r.Click += delegate { St.Ov.Remove(key); b.BackColor = def; b.Text = "default"; Restyle(); };
+            fp.Controls.Add(b); fp.Controls.Add(r);
+            return fp;
+        }
 
         protected override CreateParams CreateParams
         {
@@ -314,7 +337,7 @@ namespace DesktopWidgets
         public virtual void ApplyStyle()
         {
             if (FgB != null) { FgB.Dispose(); DimB.Dispose(); AccB.Dispose(); }
-            FgB = new SolidBrush(St.Fg); DimB = new SolidBrush(St.Dim); AccB = new SolidBrush(St.Accent);
+            FgB = new SolidBrush(Ov("value", St.Fg)); DimB = new SolidBrush(Ov("label", St.Dim)); AccB = new SolidBrush(Ov("accent2", St.Accent));
             foreach (Font f in fonts.Values) f.Dispose();
             fonts.Clear();
             ClientSize = new Size(Math.Max(60, St.W), Math.Max(40, St.H));
@@ -371,9 +394,10 @@ namespace DesktopWidgets
             }
             g.DrawString(s, F(sz, bold), b, r, centerFmt);
         }
-        protected void Ttl(Graphics g, string s, float x, float y) { if (St.ShowTitle) g.DrawString(s, F(13, true), DimB, x, y); }
+        protected void Ttl(Graphics g, string s, float x, float y) { if (St.ShowTitle) using (SolidBrush tb = new SolidBrush(Ov("title", Ov("label", St.Dim)))) g.DrawString(s, F(13, true), tb, x, y); }
         protected static string Gb(double bytes) { return (bytes / 1073741824.0).ToString("0.0", CultureInfo.InvariantCulture); }
-        protected void Spark(Graphics g, double[] h, float x, float y, float w, float ht, double min, double maxFloor, Color c)
+        protected void Spark(Graphics g, double[] h, float x, float y, float w, float ht, double min, double maxFloor, Color c) { SparkC(g, h, x, y, w, ht, min, maxFloor, Ov("graph", c)); }
+        protected void SparkC(Graphics g, double[] h, float x, float y, float w, float ht, double min, double maxFloor, Color c)
         {
             double max = maxFloor; foreach (double v in h) if (v > max) max = v;
             if (max <= min || w < 4 || ht < 4) return;
@@ -381,16 +405,18 @@ namespace DesktopWidgets
             for (int i = 0; i < h.Length; i++) pts[i] = new PointF(x + i * (w / (h.Length - 1)), (float)(y + ht - ((h[i] - min) / (max - min)) * ht));
             using (Pen p = new Pen(c, 1.5f)) g.DrawLines(p, pts);
         }
-        protected void Bar(Graphics g, float x, float y, float w, float h, double frac)
+        protected void Bar(Graphics g, float x, float y, float w, float h, double frac) { BarC(g, x, y, w, h, frac, Ov("barfill", St.Accent)); }
+        protected void BarC(Graphics g, float x, float y, float w, float h, double frac, Color fill)
         {
             frac = Math.Max(0, Math.Min(1, frac));
-            using (SolidBrush bg = new SolidBrush(Color.FromArgb(70, St.Dim))) g.FillRectangle(bg, x, y, w, h);
-            Color c = frac > 0.9 ? Color.FromArgb(255, 90, 90) : St.Accent;
+            using (SolidBrush bg = new SolidBrush(Color.FromArgb(70, Ov("barbg", St.Dim)))) g.FillRectangle(bg, x, y, w, h);
+            Color c = frac > 0.9 ? Ov("warn", Color.FromArgb(255, 90, 90)) : fill;
             using (SolidBrush fg = new SolidBrush(c)) g.FillRectangle(fg, x, y, (float)(w * frac), h);
         }
-        protected void Arc(Graphics g, RectangleF r, double frac, float width, Color c)
+        protected void Arc(Graphics g, RectangleF r, double frac, float width, Color c) { ArcC(g, r, frac, width, Ov("ring", c)); }
+        protected void ArcC(Graphics g, RectangleF r, double frac, float width, Color c)
         {
-            using (Pen bg = new Pen(Color.FromArgb(60, St.Dim), width)) g.DrawArc(bg, r, -90, 360);
+            using (Pen bg = new Pen(Color.FromArgb(60, Ov("barbg", St.Dim)), width)) g.DrawArc(bg, r, -90, 360);
             if (frac > 0.003) using (Pen p = new Pen(c, width)) { p.StartCap = LineCap.Round; p.EndCap = LineCap.Round; g.DrawArc(p, r, -90, (float)(360 * Math.Min(1, frac))); }
         }
 
@@ -552,6 +578,7 @@ namespace DesktopWidgets
             m.Opening += delegate { lk.Checked = St.Lock; top.Checked = St.Top; };
             m.Items.Add(top); m.Items.Add(lk);
             m.Items.Add("Duplicate this widget", null, delegate { Program.AddWidget(Type, this); });
+            ToolStripMenuItem wm = new ToolStripMenuItem("Widgets: show / restore / add"); Program.AttachWidgetsMenu(wm); m.Items.Add(wm);
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add("Hide", null, delegate { SetShown(false); Program.RefreshTray(); });
             m.Items.Add("Delete this widget", null, delegate { Program.RemoveWidget(this); });
@@ -704,30 +731,31 @@ namespace DesktopWidgets
         void DrawAnalog(Graphics g, DateTime n, int st, float W, float H, float top)
         {
             float R = Math.Min(W, H) / 2 - 3; float cx = W / 2, cy = H / 2;
-            using (SolidBrush face = new SolidBrush(Color.FromArgb(40, St.Dim))) g.FillEllipse(face, cx - R, cy - R, 2 * R, 2 * R);
-            using (Pen ring = new Pen(St.Dim, 2)) g.DrawEllipse(ring, cx - R, cy - R, 2 * R, 2 * R);
+            using (SolidBrush face = new SolidBrush(Color.FromArgb(40, Ov("face", St.Dim)))) g.FillEllipse(face, cx - R, cy - R, 2 * R, 2 * R);
+            using (Pen ring = new Pen(Ov("face", St.Dim), 2)) g.DrawEllipse(ring, cx - R, cy - R, 2 * R, 2 * R);
             for (int i = 0; i < 60; i++)
             {
                 bool hr = i % 5 == 0; if (st == 4 && !hr) continue;
                 double a = i * Math.PI / 30; float r1 = R - (hr ? R * 0.14f : R * 0.07f), r2 = R - 3;
-                using (Pen p = new Pen(hr ? St.Fg : St.Dim, hr ? 2.5f : 1)) g.DrawLine(p, cx + (float)Math.Sin(a) * r1, cy - (float)Math.Cos(a) * r1, cx + (float)Math.Sin(a) * r2, cy - (float)Math.Cos(a) * r2);
+                using (Pen p = new Pen(hr ? Ov("ticks", St.Fg) : Ov("ticks", St.Dim), hr ? 2.5f : 1)) g.DrawLine(p, cx + (float)Math.Sin(a) * r1, cy - (float)Math.Cos(a) * r1, cx + (float)Math.Sin(a) * r2, cy - (float)Math.Cos(a) * r2);
             }
             if (st == 3 || st == 5)
             {
-                string[] rom = { "XII", "I", "II", "III", "IIII", "V", "VI", "VII", "VIII", "IX", "X", "XI" };
+                SolidBrush numB = new SolidBrush(Ov("numerals", St.Fg)); string[] rom = { "XII", "I", "II", "III", "IIII", "V", "VI", "VII", "VIII", "IX", "X", "XI" };
                 for (int i = 0; i < 12; i++)
                 {
                     if (st == 3 && i % 3 != 0) continue;
                     double a = i * Math.PI / 6; float rr = R * 0.7f; string s = st == 3 ? (i == 0 ? "12" : i.ToString()) : rom[i];
                     float fs = R * (st == 3 ? 0.2f : 0.13f);
-                    g.DrawString(s, F(fs, true), FgB, new RectangleF(cx + (float)Math.Sin(a) * rr - 20, cy - (float)Math.Cos(a) * rr - fs, 40, fs * 2), new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center });
+                    g.DrawString(s, F(fs, true), numB, new RectangleF(cx + (float)Math.Sin(a) * rr - 20, cy - (float)Math.Cos(a) * rr - fs, 40, fs * 2), new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center });
                 }
+                numB.Dispose();
             }
             double sec = n.Second, min = n.Minute + sec / 60.0, hour = (n.Hour % 12) + min / 60.0;
-            Hand(g, cx, cy, hour * 30, R * 0.5f, st == 4 ? 3f : 5f, St.Fg);
-            Hand(g, cx, cy, min * 6, R * 0.76f, st == 4 ? 2f : 3.5f, St.Fg);
-            if (Secs) Hand(g, cx, cy, sec * 6, R * 0.85f, 1.5f, St.Accent);
-            using (SolidBrush b = new SolidBrush(St.Accent)) g.FillEllipse(b, cx - 4, cy - 4, 8, 8);
+            Hand(g, cx, cy, hour * 30, R * 0.5f, st == 4 ? 3f : 5f, Ov("hourhand", St.Fg));
+            Hand(g, cx, cy, min * 6, R * 0.76f, st == 4 ? 2f : 3.5f, Ov("minhand", St.Fg));
+            if (Secs) Hand(g, cx, cy, sec * 6, R * 0.85f, 1.5f, Ov("sechand", St.Accent));
+            using (SolidBrush b = new SolidBrush(Ov("dot", St.Accent))) g.FillEllipse(b, cx - 4, cy - 4, 8, 8);
             if (ShowDate && st != 4) g.DrawString(n.ToString("d MMM"), F(R * 0.11f, false), DimB, new RectangleF(cx - R * 0.4f, cy + R * 0.28f, R * 0.8f, R * 0.2f), new StringFormat { Alignment = StringAlignment.Center });
         }
         static void Hand(Graphics g, float cx, float cy, double deg, float len, float w, Color c)
@@ -1197,6 +1225,133 @@ namespace DesktopWidgets
         }
     }
 
+
+    // ================= Dashboard: CPU + RAM + GPU in one =================
+    class DashWidget : Widget
+    {
+        long pi, pk, pu; double cpu, ram, gpu, usedGb, totGb;
+        double[] hc = new double[60], hr = new double[60], hg = new double[60];
+        List<PerformanceCounter> pcs = new List<PerformanceCounter>(); bool gfail; int tickN; string gname = "", cname = "";
+        bool On(string k) { return Settings.GetBool(Id + ".d_" + k, true); }
+        int DStyle { get { return Settings.GetInt(Id + ".d_style", 0); } }
+        int Layout { get { return Settings.GetInt(Id + ".d_layout", 0); } }
+        public DashWidget(string id) : base(id, "dash", "CPU + RAM + GPU", 380, 150, 1000)
+        {
+            long i, k, u; Native.GetSystemTimes(out i, out k, out u); pi = i; pk = k; pu = u;
+            try { using (RegistryKey rk = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11cd-b80c-00805f9fa9cb}\0000")) if (rk != null) gname = Convert.ToString(rk.GetValue("DriverDesc", "")); } catch { }
+            try { cname = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString", ""); cname = cname == null ? "" : cname.Trim(); } catch { }
+            OnTick();
+        }
+        void Chk(Action<string, Control> add, string text, string key, bool def)
+        {
+            CheckBox c = new CheckBox(); c.Text = text; c.Checked = Settings.GetBool(Id + key, def); c.Width = 280;
+            c.CheckedChanged += delegate { Settings.Set(Id + key, c.Checked); Settings.Save(); Invalidate(); }; add("", c);
+        }
+        public override void BuildExtra(Action<string, Control> add)
+        {
+            Chk(add, "Show CPU", ".d_cpu", true); Chk(add, "Show RAM", ".d_ram", true); Chk(add, "Show GPU", ".d_gpu", true);
+            ComboBox cs = new ComboBox(); cs.DropDownStyle = ComboBoxStyle.DropDownList; cs.Width = 220;
+            cs.Items.AddRange(new object[] { "Bars + numbers", "Rings", "Live graphs" }); cs.SelectedIndex = Math.Min(2, DStyle);
+            cs.SelectedIndexChanged += delegate { Settings.Set(Id + ".d_style", cs.SelectedIndex); Settings.Save(); Invalidate(); }; add("Style", cs);
+            ComboBox ly = new ComboBox(); ly.DropDownStyle = ComboBoxStyle.DropDownList; ly.Width = 220;
+            ly.Items.AddRange(new object[] { "Auto", "Side by side", "Stacked" }); ly.SelectedIndex = Math.Min(2, Layout);
+            ly.SelectedIndexChanged += delegate { Settings.Set(Id + ".d_layout", ly.SelectedIndex); Settings.Save(); Invalidate(); }; add("Layout", ly);
+            Chk(add, "Show mini graph (Bars style)", ".d_graph", true);
+            Chk(add, "Show details (GB, GPU name)", ".d_detail", true);
+            Chk(add, "Separator lines between parts", ".d_div", true);
+            add("CPU color", OvPicker("cpu", Color.FromArgb(80, 160, 255)));
+            add("RAM color", OvPicker("ram", Color.FromArgb(70, 210, 140)));
+            add("GPU color", OvPicker("gpu", Color.FromArgb(255, 170, 60)));
+            add("Part background", OvPicker("cellbg", Color.FromArgb(40, 40, 50)));
+            add("Separator color", OvPicker("divider", Color.FromArgb(120, 150, 150, 150)));
+        }
+        protected override void OnTick()
+        {
+            long i, k, u;
+            if (Native.GetSystemTimes(out i, out k, out u))
+            {
+                long idle = i - pi, total = (k - pk) + (u - pu);
+                if (total > 0) cpu = 1.0 - (double)idle / total;
+                pi = i; pk = k; pu = u;
+            }
+            Native.MEMSTATUS m = new Native.MEMSTATUS(); m.dwLength = (uint)Marshal.SizeOf(typeof(Native.MEMSTATUS));
+            if (Native.GlobalMemoryStatusEx(ref m)) { totGb = m.ullTotalPhys / 1073741824.0; usedGb = (m.ullTotalPhys - m.ullAvailPhys) / 1073741824.0; ram = usedGb / totGb; }
+            if (On("gpu"))
+            {
+                try
+                {
+                    if (tickN++ % 10 == 0)
+                    {
+                        pcs.Clear();
+                        PerformanceCounterCategory cat = new PerformanceCounterCategory("GPU Engine");
+                        foreach (string inst in cat.GetInstanceNames()) if (inst.EndsWith("engtype_3D")) { try { pcs.Add(new PerformanceCounter("GPU Engine", "Utilization Percentage", inst)); } catch { } }
+                        gfail = pcs.Count == 0;
+                    }
+                    double sum = 0; foreach (PerformanceCounter p in pcs) { try { sum += p.NextValue(); } catch { } }
+                    gpu = Math.Min(100, sum);
+                }
+                catch { gfail = true; }
+            }
+            Array.Copy(hc, 1, hc, 0, hc.Length - 1); hc[hc.Length - 1] = cpu * 100;
+            Array.Copy(hr, 1, hr, 0, hr.Length - 1); hr[hr.Length - 1] = ram * 100;
+            Array.Copy(hg, 1, hg, 0, hg.Length - 1); hg[hg.Length - 1] = gpu;
+        }
+        protected override void Draw(Graphics g)
+        {
+            List<string> names = new List<string>(); List<double> vals = new List<double>(); List<Color> cols = new List<Color>(); List<double[]> hs = new List<double[]>(); List<string> det = new List<string>();
+            if (On("cpu")) { names.Add("CPU"); vals.Add(cpu); cols.Add(Ov("cpu", Color.FromArgb(80, 160, 255))); hs.Add(hc); det.Add(cname); }
+            if (On("ram")) { names.Add("RAM"); vals.Add(ram); cols.Add(Ov("ram", Color.FromArgb(70, 210, 140))); hs.Add(hr); det.Add(usedGb.ToString("0.0") + " / " + totGb.ToString("0.0") + " GB"); }
+            if (On("gpu")) { names.Add("GPU"); vals.Add(gfail ? 0 : gpu / 100.0); cols.Add(Ov("gpu", Color.FromArgb(255, 170, 60))); hs.Add(hg); det.Add(gfail ? "not available" : gname); }
+            int n = names.Count; float W = LW, H = LH;
+            if (n == 0) { Txt(g, "Turn on CPU / RAM / GPU in Customize", 12, false, DimB, 4, 4); return; }
+            bool horiz = Layout == 1 || (Layout == 0 && W >= H * 1.3f);
+            float cw = horiz ? W / n : W, ch = horiz ? H : H / n;
+            StringFormat far = new StringFormat { Alignment = StringAlignment.Far, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+            StringFormat near = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+            bool hasBg = St.Ov.ContainsKey("cellbg");
+            for (int i = 0; i < n; i++)
+            {
+                float x = horiz ? i * cw : 0, y = horiz ? 0 : i * ch;
+                RectangleF r = new RectangleF(x + 4, y + 3, cw - 8, ch - 6);
+                if (hasBg) using (SolidBrush cb = new SolidBrush(Ov("cellbg", Color.Gray))) g.FillRectangle(cb, r);
+                if (i > 0 && On("div"))
+                    using (Pen dp = new Pen(Ov("divider", Color.FromArgb(120, 150, 150, 150)), 1))
+                    { if (horiz) g.DrawLine(dp, x, y + 6, x, y + ch - 6); else g.DrawLine(dp, x + 6, y, x + cw - 6, y); }
+                double f = Math.Max(0, Math.Min(1, vals[i])); string pct = (f * 100).ToString("0") + "%";
+                Color mc = cols[i];
+                if (r.Width < 20 || r.Height < 20) continue;
+                int st = DStyle;
+                using (SolidBrush tb = new SolidBrush(Ov("title", mc)))
+                {
+                    if (st == 1)
+                    {
+                        float R = Math.Min(r.Width / 2f, r.Height / 2f) - 6; if (R < 10) continue; float cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2; float lw = Math.Max(4, R * 0.18f);
+                        ArcC(g, new RectangleF(cx - R, cy - R, 2 * R, 2 * R), f, lw, f > 0.9 ? Ov("warn", Color.FromArgb(255, 90, 90)) : mc);
+                        Fit(g, pct, 60, true, FgB, new RectangleF(cx - R * 0.7f, cy - R * 0.5f, R * 1.4f, R * 0.6f));
+                        if (St.ShowTitle) Fit(g, names[i], 30, true, tb, new RectangleF(cx - R * 0.7f, cy + R * 0.1f, R * 1.4f, R * 0.4f));
+                    }
+                    else if (st == 2)
+                    {
+                        SparkC(g, hs[i], r.X + 2, r.Y + 22, r.Width - 4, Math.Max(6, r.Height - 26), 0, 100, mc);
+                        if (St.ShowTitle) g.DrawString(names[i], F(13, true), tb, r.X + 2, r.Y);
+                        g.DrawString(pct, F(16, true), FgB, new RectangleF(r.X, r.Y - 1, r.Width - 2, 22), far);
+                    }
+                    else
+                    {
+                        float yy = r.Y;
+                        if (St.ShowTitle) { g.DrawString(names[i], F(13, true), tb, r.X + 2, yy); yy += 15; }
+                        float vs = Math.Max(14, Math.Min(30, Math.Min(r.Height * 0.3f, r.Width * 0.24f)));
+                        g.DrawString(pct, F(vs, true), FgB, r.X + 2, yy); yy += vs + 4;
+                        if (On("detail") && r.Height > 70 && det[i] != "") { g.DrawString(det[i], F(11, false), DimB, new RectangleF(r.X + 2, yy, r.Width - 4, 15), near); yy += 15; }
+                        float by = r.Bottom - 9;
+                        if (On("graph") && by - yy > 16) SparkC(g, hs[i], r.X + 2, yy + 2, r.Width - 4, by - yy - 6, 0, 100, mc);
+                        BarC(g, r.X + 2, by, r.Width - 4, 8, f, mc);
+                    }
+                }
+            }
+        }
+    }
+
     // ================= System info =================
     class InfoWidget : Widget
     {
@@ -1378,6 +1533,29 @@ namespace DesktopWidgets
             Add("Text color", ColorBtn(s.Fg, delegate (Color c) { s.Fg = c; }));
             Add("Secondary text color", ColorBtn(s.Dim, delegate (Color c) { s.Dim = c; }));
             Add("Accent color", ColorBtn(s.Accent, delegate (Color c) { s.Accent = c; }));
+            Section("Color of each detail separately");
+            Label cnote = new Label(); cnote.Text = "Each one can have its own color. Reset puts it back to follow the theme."; cnote.AutoSize = true; cnote.ForeColor = SystemColors.GrayText; Add("", cnote);
+            Add("Main text / big numbers", w.OvPicker("value", s.Fg));
+            Add("Labels / small text", w.OvPicker("label", s.Dim));
+            Add("Widget title", w.OvPicker("title", s.Dim));
+            Add("Highlights (seconds, minutes...)", w.OvPicker("accent2", s.Accent));
+            Add("Bar fill", w.OvPicker("barfill", s.Accent));
+            Add("Bar / ring track", w.OvPicker("barbg", s.Dim));
+            Add("Warning (above 90%)", w.OvPicker("warn", Color.FromArgb(255, 90, 90)));
+            Add("Graph lines", w.OvPicker("graph", s.Accent));
+            Add("Ring / arc", w.OvPicker("ring", s.Accent));
+            if (w.Type == "clock")
+            {
+                Add("Clock: hour hand", w.OvPicker("hourhand", s.Fg));
+                Add("Clock: minute hand", w.OvPicker("minhand", s.Fg));
+                Add("Clock: second hand", w.OvPicker("sechand", s.Accent));
+                Add("Clock: tick marks", w.OvPicker("ticks", s.Fg));
+                Add("Clock: numbers", w.OvPicker("numerals", s.Fg));
+                Add("Clock: face / ring", w.OvPicker("face", s.Dim));
+                Add("Clock: center dot", w.OvPicker("dot", s.Accent));
+            }
+            Button rall = new Button(); rall.Text = "Reset all detail colors"; rall.Width = 220;
+            rall.Click += delegate { s.Ov.Clear(); w.Restyle(); Close(); Open(w); }; Add("", rall);
             CheckBox bar = new CheckBox(); bar.Text = "Accent strip on top"; bar.Checked = s.Bar; bar.CheckedChanged += delegate { s.Bar = bar.Checked; w.Restyle(); };
             Add("", bar);
             ComboBox bp = new ComboBox(); bp.DropDownStyle = ComboBoxStyle.DropDownList; bp.Width = 220; bp.Items.AddRange(new object[] { "Top", "Bottom", "Left", "Right" }); bp.SelectedIndex = s.BarPos;
@@ -1411,6 +1589,8 @@ namespace DesktopWidgets
             Add("", top);
             CheckBox lk = new CheckBox(); lk.Text = "Lock position"; lk.Checked = s.Lock; lk.CheckedChanged += delegate { s.Lock = lk.Checked; w.Restyle(); };
             Add("", lk);
+            CheckBox sw = new CheckBox(); sw.Text = "Start with Windows (launch at login)"; sw.Width = 280; sw.Checked = Program.IsAutostart();
+            sw.CheckedChanged += delegate { Program.SetAutostart(sw.Checked); }; Add("", sw);
             Label note = new Label(); note.Text = "Glass/blur need Windows 10 1803+ or Windows 11."; note.AutoSize = true; note.ForeColor = SystemColors.GrayText;
             Add("", note);
         }
@@ -1421,8 +1601,8 @@ namespace DesktopWidgets
     {
         public static List<Widget> Widgets = new List<Widget>();
         static NotifyIcon tray;
-        static readonly string[] Types = { "clock", "system", "cpu", "ram", "gpu", "diskio", "network", "ping", "disk", "battery", "calendar", "notes", "stopwatch", "sysinfo" };
-        static readonly string[] TypeTitles = { "Clock", "System (CPU + RAM)", "CPU (detailed, per-core)", "RAM (detailed, top processes)", "GPU", "Disk activity", "Network", "Ping", "Disks (space)", "Battery", "Calendar", "Notes", "Stopwatch", "System info" };
+        static readonly string[] Types = { "clock", "dash", "system", "cpu", "ram", "gpu", "diskio", "network", "ping", "disk", "battery", "calendar", "notes", "stopwatch", "sysinfo" };
+        static readonly string[] TypeTitles = { "Clock", "CPU + RAM + GPU (all in one)", "System (CPU + RAM)", "CPU (detailed, per-core)", "RAM (detailed, top processes)", "GPU", "Disk activity", "Network", "Ping", "Disks (space)", "Battery", "Calendar", "Notes", "Stopwatch", "System info" };
 
         static Widget Make(string type, string id)
         {
@@ -1430,6 +1610,7 @@ namespace DesktopWidgets
             {
                 case "clock": return new ClockWidget(id);
                 case "system": return new SystemWidget(id);
+                case "dash": return new DashWidget(id);
                 case "cpu": return new CpuWidget(id);
                 case "ram": return new RamWidget(id);
                 case "gpu": return new GpuWidget(id);
@@ -1458,6 +1639,54 @@ namespace DesktopWidgets
             Widget w = Make(type, id); Widgets.Add(w); w.Init(); w.Show(); RefreshTray();
             return w;
         }
+        public static void AttachWidgetsMenu(ToolStripMenuItem root)
+        {
+            root.DropDownItems.Add("...");
+            root.DropDownOpening += delegate
+            {
+                root.DropDownItems.Clear();
+                foreach (Widget w in Widgets)
+                {
+                    Widget ww = w;
+                    ToolStripMenuItem it = new ToolStripMenuItem(w.Title + (w.Id != w.Type ? " (" + w.Id + ")" : "")); it.Checked = w.Visible;
+                    it.Click += delegate { ww.SetShown(!ww.Visible); RefreshTray(); };
+                    root.DropDownItems.Add(it);
+                }
+                root.DropDownItems.Add(new ToolStripSeparator());
+                ToolStripMenuItem rs = new ToolStripMenuItem("Restore deleted widgets");
+                string removed = "," + Settings.Get("removed", "") + ",";
+                for (int i = 0; i < Types.Length; i++)
+                {
+                    string t = Types[i];
+                    if (removed.Contains("," + t + ",") && !Widgets.Exists(x => x.Id == t)) rs.DropDownItems.Add(TypeTitles[i], null, delegate { RestoreWidget(t); });
+                }
+                if (rs.DropDownItems.Count == 0) { ToolStripMenuItem none = new ToolStripMenuItem("(nothing deleted)"); none.Enabled = false; rs.DropDownItems.Add(none); }
+                else rs.DropDownItems.Add("Restore ALL", null, delegate { RestoreAll(); });
+                root.DropDownItems.Add(rs);
+                ToolStripMenuItem add = new ToolStripMenuItem("Add another widget");
+                for (int i = 0; i < Types.Length; i++) { string t = Types[i]; add.DropDownItems.Add(TypeTitles[i], null, delegate { AddWidget(t, null); }); }
+                root.DropDownItems.Add(add);
+                ToolStripMenuItem auto = new ToolStripMenuItem("Start with Windows"); auto.Checked = IsAutostart();
+                auto.Click += delegate { SetAutostart(!IsAutostart()); };
+                root.DropDownItems.Add(auto);
+            };
+        }
+        public static void RestoreWidget(string id)
+        {
+            string[] rm = Settings.Get("removed", "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+            List<string> keep = new List<string>(); foreach (string e in rm) if (e != id) keep.Add(e);
+            Settings.Set("removed", string.Join(",", keep.ToArray()));
+            if (!Widgets.Exists(x => x.Id == id) && Array.IndexOf(Types, id) >= 0)
+            {
+                Settings.Set(id + ".visible", true); Settings.Save();
+                Widget w = Make(id, id); Widgets.Add(w); w.Init(); w.Show();
+            }
+            Settings.Save(); RefreshTray();
+        }
+        public static void RestoreAll()
+        {
+            foreach (string t in Types) { string removed = "," + Settings.Get("removed", "") + ","; if (removed.Contains("," + t + ",")) RestoreWidget(t); }
+        }
         public static void RemoveWidget(Widget w)
         {
             if (Widgets.Count <= 1) return;
@@ -1478,6 +1707,13 @@ namespace DesktopWidgets
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Settings.Load();
+            if (Settings.GetInt("ver", 0) < 4)
+            {
+                Settings.Set("system.visible", false); Settings.Set("cpu.visible", false); Settings.Set("ram.visible", false);
+                Settings.Set("ver", 4); Settings.Save();
+            }
+            if (!Settings.GetBool("autostart_init", false)) { SetAutostart(true); Settings.Set("autostart_init", true); Settings.Save(); }
+            else if (IsAutostart()) SetAutostart(true);
 
             string removed = "," + Settings.Get("removed", "") + ",";
             for (int i = 0; i < Types.Length; i++) if (!removed.Contains("," + Types[i] + ",")) Widgets.Add(Make(Types[i], Types[i]));
@@ -1485,7 +1721,7 @@ namespace DesktopWidgets
             foreach (Widget w in Widgets)
             {
                 w.Init();
-                if (Settings.GetBool(w.Id + ".visible", w.Id == "clock" || w.Id == "system" || w.Id == "network" || w.Id == "calendar" || w.Id == "cpu" || w.Id == "ram")) w.Show();
+                if (Settings.GetBool(w.Id + ".visible", w.Id == "clock" || w.Id == "dash" || w.Id == "network" || w.Id == "calendar")) w.Show();
             }
 
             tray = new NotifyIcon();
@@ -1493,6 +1729,11 @@ namespace DesktopWidgets
             tray.Text = "Desktop Widgets";
             tray.Visible = true;
             RefreshTray();
+            tray.MouseClick += delegate (object so, MouseEventArgs me)
+            {
+                if (me.Button == MouseButtons.Left)
+                    try { typeof(NotifyIcon).GetMethod("ShowContextMenu", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(tray, null); } catch { }
+            };
             tray.DoubleClick += delegate { foreach (Widget w in Widgets) if (w.Visible) w.Activate(); };
             Application.Run();
             mx.ReleaseMutex();
@@ -1510,6 +1751,7 @@ namespace DesktopWidgets
                 m.Items.Add(it);
             }
             m.Items.Add(new ToolStripSeparator());
+            ToolStripMenuItem wmt = new ToolStripMenuItem("Restore deleted widgets"); AttachWidgetsMenu(wmt); m.Items.Add(wmt);
             ToolStripMenuItem add = new ToolStripMenuItem("Add widget");
             for (int i = 0; i < Types.Length; i++) { string t = Types[i]; add.DropDownItems.Add(TypeTitles[i], null, delegate { AddWidget(t, null); }); }
             m.Items.Add(add);
@@ -1526,11 +1768,11 @@ namespace DesktopWidgets
         }
 
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        static bool IsAutostart()
+        public static bool IsAutostart()
         {
             try { using (RegistryKey k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue("DesktopWidgets") != null; } catch { return false; }
         }
-        static void SetAutostart(bool on)
+        public static void SetAutostart(bool on)
         {
             try
             {
